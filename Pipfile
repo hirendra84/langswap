@@ -1,0 +1,25 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+fastapi = {extras = ["all"], version = "*"}
+sqlalchemy = "*"
+pydantic = "*"
+geoalchemy2 = "*"
+psycopg2 = "*"
+python-jose = {extras = ["cryptography"], version = "*"}
+passlib = {extras = ["bcrypt"], version = "*"}
+geojson-pydantic = "*"
+shapely = "*"
+psycopg2-binary = "*"
+alembic = "*"
+pytest = "*"
+aioapns = "*"
+
+[dev-packages]
+autopep8 = "*"
+
+[requires]
+python_version = "3.9"
