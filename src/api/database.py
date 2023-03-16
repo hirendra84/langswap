@@ -8,13 +8,13 @@ from sqlalchemy.orm import sessionmaker
 from api.settings import DEBUG
 from api.utils import custom_json_serializer_sa_pydantic_models
 
-PG_HOST = os.environ.get('PG_HOST', '127.0.0.1')
+POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
 PG_PORT = os.environ.get('PG_PORT', 5432)
-PG_USER = os.environ.get('PG_USER', 'joint_user')
-PG_PASS = os.environ.get('PG_PASS', 'pass123')
-PG_DBNAME = os.environ.get('PG_DBNAME', 'joint_dev')
+POSTGRES_USER = os.environ.get('POSTGRES_USER', 'joint_user')
+POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'pass123')
+POSTGRES_DB = os.environ.get('POSTGRES_DB', 'joint_dev')
 
-SQLALCHEMY_DATABASE_URL = f"postgresql://{PG_USER}:{PG_PASS}@{PG_HOST}/{PG_DBNAME}"
+SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}/{POSTGRES_DB}"
 
 
 engine = create_engine(
