@@ -1,0 +1,63 @@
+version: '3'
+
+services:
+  backend:
+    build: .
+    command: uvicorn api.main:app --reload
+    container_name: ds-backend
+    environment:
+      - POSTGRES_DB=api
+      - POSTGRES_USER=api
+      - POSTGRES_PASSWORD=api
+      - POSTGRES_HOST=db
+      - DEBUG=True
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8000:8000"
+    networks:
+      - ds-dev
+
+  celery:
+    build: .
+    command: celery -A api.utils.ml_processing.tasks worker --loglevel=info
+    container_name: ds-celery
+    environment:
+      - POSTGRES_DB=api
+      - POSTGRES_USER=api
+      - POSTGRES_PASSWORD=api
+      - POSTGRES_HOST=db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - BACKEND_URL=backend
+      - DEBUG=True
+    depends_on:
+      - db
+      - redis
+    networks:
+      - ds-dev
+
+  db:
+    image: postgres
+    container_name: ds-db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=api
+      - POSTGRES_USER=api
+      - POSTGRES_PASSWORD=api
+    networks:
+      - ds-dev
+
+  redis:
+    image: redis:alpine
+    container_name: ds-redis
+    networks:
+      - ds-dev
+
+volumes:
+  postgres_data:
+
+networks:
+  ds-dev:
+    external: true
