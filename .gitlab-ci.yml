@@ -8,9 +8,9 @@ stages:
   - deploy
 
 image: docker:stable
-services:
-  - name: docker:stable
-    command: ["--tls=false"]
+  #services:
+  #  - name: docker:stable
+  #    command: ["--tls=false"]
 
 deploy:
   stage: deploy
