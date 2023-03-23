@@ -1,5 +1,3 @@
-image: docker:stable
-
 variables:
   DOCKER_HOST: tcp://docker:2375/
   DOCKER_DRIVER: overlay2
@@ -9,9 +7,9 @@ variables:
 stages:
   - deploy
 
-image: docker:latest
+image: docker:stable
 services:
-  - name: docker:dind
+  - name: docker:stable
     command: ["--tls=false"]
 
 deploy:
