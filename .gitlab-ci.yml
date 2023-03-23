@@ -1,23 +1,19 @@
 variables:
-  DOCKER_HOST: tcp://localhost:2375/
+  DOCKER_HOST: "unix:///var/run/docker.sock"
   DOCKER_DRIVER: overlay2
-  DS_NETWORK_NAME: ds-dev
   DOCKER_TLS_CERTDIR: ""
+  DS_NETWORK_NAME: ds-dev
 
 stages:
   - deploy
 
-image: docker:stable
-  #services:
-  #  - name: docker:stable
-  #    command: ["--tls=false"]
+image: docker/compose:1.28.6
 
 deploy:
   stage: deploy
   tags:
     - ds
   script:
-    - sleep 3000
     - docker network create $DS_NETWORK_NAME || true
     - docker-compose up 
       --build
