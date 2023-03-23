@@ -1,0 +1,31 @@
+image: docker:stable
+
+variables:
+  DOCKER_HOST: tcp://docker:2375/
+  DOCKER_DRIVER: overlay2
+  DS_NETWORK_NAME: ds-dev
+  DOCKER_TLS_CERTDIR: ""
+
+stages:
+  - deploy
+
+image: docker:latest
+services:
+  - name: docker:dind
+    command: ["--tls=false"]
+
+deploy:
+  stage: deploy
+  tags:
+    - ds
+  script:
+    - docker network create $DS_NETWORK_NAME || true
+    - docker-compose up 
+      --build
+      --force-recreate 
+      --detach
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "feature/ci"
+
