@@ -5,8 +5,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # SQLALCHEMY_DATABASE_URL = "sqlite:///./sql_app.db"
-from api.settings import DEBUG
-from api.utils import custom_json_serializer_sa_pydantic_models
+from src.settings import DEBUG
+from src.utils import custom_json_serializer_sa_pydantic_models
 
 POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
 PG_PORT = os.environ.get('PG_PORT', 5432)

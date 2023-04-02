@@ -1,14 +1,13 @@
-import uuid
 from io import BytesIO
 
 from celery import chain
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from . import models
-from . import schemas
-from .utils.common import upload_file_to_s3
-from .utils.ml_processing import tasks as ml_tasks
+from src import models
+from src import schemas
+from src.utils.common import upload_file_to_s3, generate_public_id
+from src.utils.ml_processing import tasks as ml_tasks
 
 
 async def process_video(db: Session, file: UploadFile):
@@ -18,7 +17,7 @@ async def process_video(db: Session, file: UploadFile):
     content = await file.read(max_size_bytes)
     content = BytesIO(content)
 
-    public_id = str(uuid.uuid1())
+    public_id = generate_public_id()
     s3_url = upload_file_to_s3(content, public_id)
 
     obj = models.ProcessedObject(
@@ -51,3 +50,17 @@ async def update_object(db: Session, object_id: str, data: schemas.UpdProcessedO
         .update(data.dict())
     db.commit()
     return a
+
+
+async def create_user(db: Session, data: schemas.CreateUser) -> models.User:
+    public_id = generate_public_id()
+
+    obj = models.User(
+        email=data.email,
+        public_id=public_id,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+
+    return obj

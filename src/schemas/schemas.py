@@ -1,8 +1,8 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
-from api.enums import ProcessStatus
+from src.enums import ProcessStatus
 
 
 class RespProcessedObject(BaseModel):
@@ -21,3 +21,14 @@ class UpdProcessedObject(BaseModel):
     prepared_link: Optional[str]
     public_id: str
 
+
+class CreateUser(BaseModel):
+    email: EmailStr
+
+
+class RespUser(BaseModel):
+    email: EmailStr
+    public_id: str
+
+    class Config:
+        orm_mode = True

@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from io import BytesIO
 
 import boto3 as boto3
@@ -37,3 +38,11 @@ def upload_file_to_s3(file: BytesIO, object_name: str) -> str:
     )
 
     return s3_url
+
+
+def generate_public_id() -> str:
+    return str(uuid.uuid1())
+
+
+def is_valid_email(email: str) -> bool:
+    pass

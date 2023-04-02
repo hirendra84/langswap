@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum
+from sqlalchemy import Column, Integer, String, Enum, DateTime, func
 from .database import Base
 
 from .enums import ProcessStatus
@@ -12,4 +12,12 @@ class ProcessedObject(Base):
     original_name = Column(String)
     status = Column(Enum(ProcessStatus), default=ProcessStatus.uploaded)
     prepared_link = Column(String, default='')
+    public_id = Column(String(36), nullable=False, unique=True, index=True)
+
+
+class User(Base):
+    __tablename__ = "user"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
     public_id = Column(String(36), nullable=False, unique=True, index=True)

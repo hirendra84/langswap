@@ -4,7 +4,7 @@ from time import sleep
 import requests
 from celery import Celery
 
-from api.enums import ProcessStatus
+from src.enums import ProcessStatus
 
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost')
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000')

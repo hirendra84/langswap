@@ -15,11 +15,9 @@ POSTGRES_DB = os.environ.get('POSTGRES_DB', 'joint_dev')
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}/{POSTGRES_DB}"
 
-
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
-import api
-
+from src import models
 config = context.config
 
 # Interpret the config file for Python logging.
@@ -30,7 +28,7 @@ fileConfig(config.config_file_name)
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = api.models.Base.metadata
+target_metadata = models.Base.metadata
 
 
 # other values from the config, defined by the needs of env.py,

@@ -17,7 +17,7 @@ devel:
 	pipenv install --dev
 
 run:
-	pipenv run uvicorn api.main:app --reload
+	poetry run uvicorn src.main:app --reload
 
 lock:
 	pipenv --rm
