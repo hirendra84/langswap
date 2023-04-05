@@ -35,8 +35,6 @@ async def get_object(
 ):
     try:
         obj: ProcessedObject = await crud.get_object(db, object_id)
-        print(obj.prepared_link)
-        print(schemas.RespProcessedObject.from_orm(obj))
     except Exception as e:
         print(e)
         raise HTTPException(
@@ -63,3 +61,16 @@ async def update_object(
         )
 
 
+@router.post("/video/by-link")
+async def upload_video_by_link(
+        data: schemas.CreateProcessedObjectByLink,
+        db: Session = Depends(get_db)):
+    try:
+        obj: ProcessedObject = await crud.process_video_by_link(db, data)
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Oops there is a problem! We are already trying to fix it',
+        )
+    return obj
