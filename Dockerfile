@@ -16,7 +16,9 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.create false \
     && poetry install --no-dev --no-interaction --no-ansi
 
-COPY src/ alembic alembic.ini entrypoint.sh .
+COPY src ./src
+COPY alembic ./alembic
+COPY alembic.ini entrypoint.sh .
 
 # run entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
