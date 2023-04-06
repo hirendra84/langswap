@@ -1,0 +1,26 @@
+variables:
+  DOCKER_HOST: "unix:///var/run/docker.sock"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DS_NETWORK_NAME: ds-dev
+
+stages:
+  - deploy
+
+image: docker/compose:1.28.6
+
+deploy:
+  stage: deploy
+  tags:
+    - ds
+  script:
+    - docker network create $DS_NETWORK_NAME || true
+    - docker-compose up 
+      --build
+      --force-recreate 
+      --detach
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "feature/ci"
+
