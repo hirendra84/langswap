@@ -10,6 +10,7 @@ services:
       - POSTGRES_USER=api
       - POSTGRES_PASSWORD=api
       - POSTGRES_HOST=db
+      - CELERY_BROKER_URL=redis://redis:6379/0
       - DEBUG=True
     ports:
       - "8000:8000"
