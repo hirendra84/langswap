@@ -3,25 +3,34 @@ version: '3'
 services:
   backend:
     build: .
-    command: uvicorn api.main:app --reload
+    command: uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
     container_name: ds-backend
     environment:
       - POSTGRES_DB=api
       - POSTGRES_USER=api
       - POSTGRES_PASSWORD=api
       - POSTGRES_HOST=db
+      - CELERY_BROKER_URL=redis://redis:6379/0
       - DEBUG=True
+    ports:
+      - "8000:8000"
     depends_on:
       - db
       - redis
-    ports:
-      - "8000:8000"
+        #    labels:
+        #      - "traefik.enable=true"
+        #      - "traefik.http.routers.ds-api.rule=Host(`api.doublespeak.ai`)"
+        #      - "traefik.http.routers.ds-api.entrypoints=websecure"
+        #      - "traefik.http.routers.ds-api.tls.certResolver=le"
+        #
+        #      - "traefik.docker.network=traefik_external"
     networks:
       - ds-dev
+      - traefik_external
 
   celery:
     build: .
-    command: celery -A api.utils.ml_processing.tasks worker --loglevel=info
+    command: celery -A src.utils.ml_processing.tasks worker --loglevel=info
     container_name: ds-celery
     environment:
       - POSTGRES_DB=api
@@ -60,4 +69,6 @@ volumes:
 
 networks:
   ds-dev:
+    external: true
+  traefik_external:
     external: true
