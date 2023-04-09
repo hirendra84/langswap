@@ -17,16 +17,15 @@ services:
     depends_on:
       - db
       - redis
-        #    labels:
-        #      - "traefik.enable=true"
-        #      - "traefik.http.routers.ds-api.rule=Host(`api.doublespeak.ai`)"
-        #      - "traefik.http.routers.ds-api.entrypoints=websecure"
-        #      - "traefik.http.routers.ds-api.tls.certResolver=le"
-        #
-        #      - "traefik.docker.network=traefik_external"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ds-api.rule=Host(`api.backend.langswap.app`)"
+      - "traefik.http.routers.ds-api.entrypoints=websecure"
+      - "traefik.http.routers.ds-api.tls.certResolver=le"
+      - "traefik.docker.network=traefik"
     networks:
       - ds-dev
-      - traefik_external
+      - traefik
 
   celery:
     build: .
@@ -72,5 +71,5 @@ volumes:
 networks:
   ds-dev:
     external: true
-  traefik_external:
+  traefik:
     external: true
