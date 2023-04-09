@@ -9,7 +9,7 @@ class RespProcessedObject(BaseModel):
     source_link: str
     original_name: str
     status: ProcessStatus
-    prepared_link: str
+    prepared_link: Optional[str]
     public_id: str
 
     class Config:

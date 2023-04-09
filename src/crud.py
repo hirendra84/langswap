@@ -69,7 +69,7 @@ async def process_video_by_link(db: Session, data: schemas.CreateProcessedObject
     return obj
 
 
-async def get_object(db: Session, object_id: str):
+async def get_object(db: Session, object_id: str) -> models.ProcessedObject | None:
     a = db.query(models.ProcessedObject)\
         .filter(models.ProcessedObject.public_id == object_id)\
         .one_or_none()

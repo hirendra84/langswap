@@ -34,14 +34,18 @@ async def get_object(
         db: Session = Depends(get_db)
 ):
     try:
-        obj: ProcessedObject = await crud.get_object(db, object_id)
+        obj: ProcessedObject | None = await crud.get_object(db, object_id)
     except Exception as e:
         print(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Oops there is a problem! We are already trying to fix it',
         )
-
+    if obj is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Video not found',
+        )
     return obj
 
 
