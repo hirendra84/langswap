@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum, DateTime, func
+from sqlalchemy import Column, Integer, String, Enum, DateTime, func, ARRAY
 from .database import Base
 
 from .enums import ProcessStatus
@@ -11,6 +11,9 @@ class ProcessedObject(Base):
     source_link = Column(String)
     original_name = Column(String)
     status = Column(Enum(ProcessStatus), default=ProcessStatus.uploaded)
+    progress = Column(Integer, default=0)
+    translated = Column(ARRAY(String))
+    recognized = Column(ARRAY(String))
     prepared_link = Column(String, default='')
     public_id = Column(String(36), nullable=False, unique=True, index=True)
 

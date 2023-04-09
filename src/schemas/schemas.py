@@ -10,6 +10,9 @@ class RespProcessedObject(BaseModel):
     original_name: str
     status: ProcessStatus
     prepared_link: Optional[str]
+    progress: int | None
+    translated: list[str] | None
+    recognized: list[str] | None
     public_id: str
 
     class Config:
@@ -19,6 +22,9 @@ class RespProcessedObject(BaseModel):
 class UpdProcessedObject(BaseModel):
     status: Optional[ProcessStatus]
     prepared_link: Optional[str]
+    progress: int | None
+    translated: list[str] | None
+    recognized: list[str] | None
     public_id: str
 
 

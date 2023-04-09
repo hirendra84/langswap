@@ -67,7 +67,10 @@ def text_to_speech(speaker_encoder_result, public_id: str, file_link: str):
                      json={
                          'status': ProcessStatus.done,
                          'prepared_link': 'https://shluhi.com/ssilka_na_fotki_twoyey_tyan',
-                         'public_id': public_id
+                         'public_id': public_id,
+                         'progress': 3,
+                         'translated': ['xyi', 'xyi', 'xyi'],
+                         'recognized': ['xyi', 'xyi', 'xyi'],
                      }
                      )
     r.raise_for_status()
