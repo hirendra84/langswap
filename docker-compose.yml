@@ -38,7 +38,7 @@ services:
       - POSTGRES_PASSWORD=api
       - POSTGRES_HOST=db
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - BACKEND_URL=backend
+      - BACKEND_URL=http://52.29.181.25:8000
       - DEBUG=True
     depends_on:
       - db
