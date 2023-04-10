@@ -29,7 +29,7 @@ services:
 
   celery:
     build: .
-    command: celery -A src.utils.ml_processing.tasks worker --loglevel=info
+    command: echo ''
     container_name: ds-celery
     environment:
       - POSTGRES_DB=api
