@@ -27,24 +27,6 @@ services:
       - ds-dev
       - traefik
 
-  celery:
-    build: .
-    command: echo ''
-    container_name: ds-celery
-    environment:
-      - POSTGRES_DB=api
-      - POSTGRES_USER=api
-      - POSTGRES_PASSWORD=api
-      - POSTGRES_HOST=db
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - BACKEND_URL=http://52.29.181.25:8000
-      - DEBUG=True
-    depends_on:
-      - db
-      - redis
-    networks:
-      - ds-dev
-
   db:
     image: postgres
     container_name: ds-db
