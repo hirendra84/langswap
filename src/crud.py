@@ -79,7 +79,8 @@ async def get_object(db: Session, object_id: str) -> models.ProcessedObject | No
 async def update_object(db: Session, object_id: str, data: schemas.UpdProcessedObject):
     a = db.query(models.ProcessedObject)\
         .filter(models.ProcessedObject.public_id == object_id)\
-        .update(data.dict())
+        .update({k: v for k, v in data.dict().items()
+                 if k in data.__fields_set__})
     db.commit()
     return a
 
