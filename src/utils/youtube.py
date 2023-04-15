@@ -5,7 +5,7 @@ from pytube import YouTube
 
 async def _get_suitable_yt_stream(yt: YouTube):
     streams = yt.streams. \
-        filter(mime_type="video/mp4", type="video")  # TODO: choose codec
+        filter(mime_type="video/mp4", type="video", progressive=True)  # TODO: choose codec
     resolutions_priority = ["1080p", "720p", "480p", "360p", "240p", "144p"]
     suitable_stream = None
     for res in resolutions_priority:
