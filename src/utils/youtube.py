@@ -16,6 +16,8 @@ async def _get_suitable_yt_stream(yt: YouTube):
             if not (60 >= stream.fps >= 24):
                 continue
             suitable_stream = stream
+        if suitable_stream:
+            break
     if suitable_stream is None:
         raise ValueError('Can\'t find suitable video format')
     return suitable_stream
