@@ -51,6 +51,7 @@ async def process_video_by_link(db: Session, data: schemas.CreateProcessedObject
 
     content = BytesIO()
     stream.stream_to_buffer(content)
+    content.seek(0)
 
     public_id = generate_public_id()
     s3_url = upload_file_to_s3(content, public_id)
