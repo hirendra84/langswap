@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, HTTPException, APIRouter
 from sqlalchemy.orm import Session
 from starlette import status
@@ -17,7 +19,7 @@ async def create_user(
     try:
         obj: User = await crud.create_user(db, user)
     except Exception as e:
-        print(e)
+        logging.exception(e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Oops there is a problem! We are already trying to fix it',

@@ -1,3 +1,4 @@
+import logging
 
 from fastapi import Depends, HTTPException, APIRouter, UploadFile, File
 from sqlalchemy.orm import Session
@@ -19,7 +20,7 @@ async def process_video(
         obj: ProcessedObject = await crud.process_video(db, data)
         print(obj.prepared_link)
     except Exception as e:
-        print(e)
+        logging.exception(e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Oops there is a problem! We are already trying to fix it',
@@ -36,7 +37,7 @@ async def get_object(
     try:
         obj: ProcessedObject | None = await crud.get_object(db, object_id)
     except Exception as e:
-        print(e)
+        logging.exception(e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Oops there is a problem! We are already trying to fix it',
@@ -58,7 +59,7 @@ async def update_object(
     try:
         await crud.update_object(db, object_id, data)
     except Exception as e:
-        print(e)
+        logging.exception(e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Ny wse po pizde poshlo, update otvalilsa',
@@ -72,7 +73,7 @@ async def upload_video_by_link(
     try:
         obj: ProcessedObject = await crud.process_video_by_link(db, data)
     except Exception as e:
-        print(e)
+        logging.exception(e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Oops there is a problem! We are already trying to fix it',
