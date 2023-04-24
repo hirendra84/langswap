@@ -22,6 +22,8 @@ services:
       - "traefik.http.routers.ds-api.rule=Host(`api.backend.langswap.app`)"
       - "traefik.http.routers.ds-api.entrypoints=websecure"
       - "traefik.http.routers.ds-api.tls.certResolver=le"
+      - "traefik.http.routers.ds-api.middlewares=serviceheaders"
+      - "traefik.http.middlewares.serviceheaders.headers.accesscontrolalloworiginlist=*" 
       - "traefik.docker.network=traefik"
     networks:
       - ds-dev
