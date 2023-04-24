@@ -4,7 +4,19 @@ from pytube import YouTube
 
 
 async def _get_suitable_yt_stream(yt: YouTube):
-    streams = yt.streams. \
+    # 3 Attempts on possible youtube errors
+    for _ in range(3):
+        streams = None
+        try:
+            streams = yt.streams
+        except KeyError:
+            pass
+        if streams is not None:
+            break
+    else:
+        raise ValueError('pytube опять лососнул тунца')
+
+    streams = streams. \
         filter(mime_type="video/mp4", type="video", progressive=True)  # TODO: choose codec
     resolutions_priority = ["1080p", "720p", "480p", "360p", "240p", "144p"]
     suitable_stream = None
