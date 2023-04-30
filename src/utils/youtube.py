@@ -1,41 +1,33 @@
+import io
 import re
+import urllib
 
-from pytube import YouTube
-
-
-async def _get_suitable_yt_stream(yt: YouTube):
-    # 3 Attempts on possible youtube errors
-    for _ in range(3):
-        streams = None
-        try:
-            streams = yt.streams
-        except KeyError:
-            pass
-        if streams is not None:
-            break
-    else:
-        raise ValueError('pytube опять лососнул тунца')
-
-    streams = streams. \
-        filter(mime_type="video/mp4", type="video", progressive=True)  # TODO: choose codec
-    resolutions_priority = ["1080p", "720p", "480p", "360p", "240p", "144p"]
-    suitable_stream = None
-    for res in resolutions_priority:
-        streams_with_res = streams.filter(res=res)
-        if not streams_with_res:
-            continue
-        for stream in streams_with_res:
-            if not (60 >= stream.fps >= 24):
-                continue
-            suitable_stream = stream
-        if suitable_stream:
-            break
-    if suitable_stream is None:
-        raise ValueError('Can\'t find suitable video format')
-    return suitable_stream
+import yt_dlp
 
 
-async def _validate_yt_link(link: str) -> str:
+def get_yt_stream_and_name(link) -> tuple[io.BytesIO, str]:
+    link = _validate_yt_link(link)
+    ydl_opts = {
+        'format': 'best',
+        'quiet': True,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        video_info = ydl.extract_info(link, download=False)
+        video_url = video_info['url']
+        video_title = video_info['title']
+
+    try:
+        with urllib.request.urlopen(video_url) as response:
+            video_data = io.BytesIO(response.read())
+
+    except Exception as e:
+        print(f"Error uploading video to S3: {e}")
+        raise
+
+    return video_data, video_title
+
+
+def _validate_yt_link(link: str) -> str:
     regexp = re.compile(
         '^(?:https?:\\/\\/)?(?:www\\.)?'
         '(?:youtu\\.be\\/|youtube\\.com\\/'

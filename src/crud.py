@@ -3,14 +3,13 @@ from logging import getLogger
 
 from celery import chain
 from fastapi import UploadFile
-from pytube import YouTube
 from sqlalchemy.orm import Session
 
 from src import models
 from src import schemas
 from src.utils.common import upload_file_to_s3, generate_public_id
 from src.utils.ml_processing import tasks as ml_tasks
-from src.utils.youtube import _get_suitable_yt_stream, _validate_yt_link
+from src.utils.youtube import get_yt_stream_and_name
 
 logger = getLogger()
 
@@ -43,22 +42,15 @@ async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject
 
 
 async def process_video_by_link(db: Session, data: schemas.CreateProcessedObjectByLink) -> models.ProcessedObject:
-    link = await _validate_yt_link(data.link)
-    logger.info(f"Validated link: {link}")
-
-    yt = YouTube(link)
-    stream = await _get_suitable_yt_stream(yt)
-
-    content = BytesIO()
-    stream.stream_to_buffer(content)
-    content.seek(0)
+    logger.error(f"Video link: {data.link}")
+    video_data, video_title = get_yt_stream_and_name(data.link)
 
     public_id = generate_public_id()
-    s3_url = upload_file_to_s3(content, public_id)
+    s3_url = upload_file_to_s3(video_data, public_id)
 
     obj = models.ProcessedObject(
         source_link=s3_url,
-        original_name=yt.title,
+        original_name=video_title,
         public_id=public_id,
     )
     db.add(obj)
