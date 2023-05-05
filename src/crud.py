@@ -16,8 +16,8 @@ logger = getLogger()
 
 async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject:
     # TODO: content_type (MIME type / media type) (e.g. image/jpeg)
-    # 100MB = 100 * 1024 (bytes) * 1024 (kb) * 1024 (mb)
-    max_size_bytes = 100 * (1024 ** 3)
+    # 100MB = 100 * 1024 (kb) * 1024 (mb)
+    max_size_bytes = 100 * (1024 ** 2)
     content = await file.read(max_size_bytes)
     content = BytesIO(content)
 
