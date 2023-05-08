@@ -32,7 +32,7 @@ def _validate_yt_link(link: str) -> str:
         '^(?:https?:\\/\\/)?(?:www\\.)?'
         '(?:youtu\\.be\\/|youtube\\.com\\/'
         '(?:embed\\/|v\\/|watch\\?v=|watch\\?.+&v=))'
-        '((\\w|-){11})?$'
+        '((\\w|-){11})?&(.*)$'
     )
     match = regexp.match(link)
     try:
