@@ -22,8 +22,12 @@ services:
       - "traefik.http.routers.ds-api.rule=Host(`api.backend.langswap.app`)"
       - "traefik.http.routers.ds-api.entrypoints=websecure"
       - "traefik.http.routers.ds-api.tls.certResolver=le"
-      - "traefik.http.routers.ds-api.middlewares=serviceheaders"
-      - "traefik.http.middlewares.serviceheaders.headers.accesscontrolalloworiginlist=*" 
+      - "traefik.http.routers.ds-api.middlewares=cors"
+      - "traefik.http.middlewares.cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST"
+      - "traefik.http.middlewares.cors.headers.accesscontrolallowheaders=*"
+      - "traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=*"
+      - "traefik.http.middlewares.cors.headers.accesscontrolmaxage=100"
+      - "traefik.http.middlewares.cors.headers.addvaryheader=true"
       - "traefik.docker.network=traefik"
     networks:
       - ds-dev
