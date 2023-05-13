@@ -29,7 +29,7 @@ async def process_video(
     return obj
 
 
-@router.get("/video/{object_id:str}", response_model=schemas.RespProcessedObject)
+@router.get("/video/{object_id:str}/", response_model=schemas.RespProcessedObject)
 async def get_object(
         object_id,
         db: Session = Depends(get_db)
