@@ -16,6 +16,8 @@ POSTGRES_DB = os.environ.get('POSTGRES_DB', 'joint_dev')
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}/{POSTGRES_DB}"
 
+if DEBUG:
+    SQLALCHEMY_DATABASE_URL = 'sqlite:///bee.db'
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

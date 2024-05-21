@@ -12,8 +12,8 @@ class ProcessedObject(Base):
     original_name = Column(String)
     status = Column(Enum(ProcessStatus), default=ProcessStatus.uploaded)
     progress = Column(Integer, default=0)
-    translated = Column(ARRAY(String))
-    recognized = Column(ARRAY(String))
+    # translated = Column(ARRAY(String))
+    # recognized = Column(ARRAY(String))
     prepared_link = Column(String, default='')
     public_id = Column(String(36), nullable=False, unique=True, index=True)
 
