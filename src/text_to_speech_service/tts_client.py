@@ -16,7 +16,7 @@ class TTSClient(ABC):
     def clone_voice(self, voice_path: str, voice_descr: str = '', voice_name = '' ):
         ...
 
-    def generate_audio(self, data: list[TextedSegment], voice: elevenlabs.Voice):
+    def generate_audio(self, data: list[TextedSegment], voice: elevenlabs.Voice) -> list[Iterator[bytes]]:
         ...
 
 
@@ -53,7 +53,7 @@ class ElevenLabsTTSClient(TTSClient):
             self._client.voices.delete(voice_id)
             return
 
-    def generate_audio(self, data: list[TextedSegment], voice: elevenlabs.Voice):
+    def generate_audio(self, data: list[TextedSegment], voice: elevenlabs.Voice) -> list[Iterator[bytes]]:
         audios: list[Iterator[bytes]] = []
         for i, segment in enumerate(data):
             audio: Iterator[bytes] = self._client.generate(text=segment.text, voice=voice)

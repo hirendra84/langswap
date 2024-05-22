@@ -27,6 +27,9 @@ librosa = "^0.10.2.post1"
 deepgram-sdk = "^3.2.7"
 torchaudio = "^2.3.0"
 deepl = "^1.18.0"
+tqdm = "^4.66.4"
+pandas = "^2.2.2"
+numpy = "^1.26.4"
 
 
 [build-system]
