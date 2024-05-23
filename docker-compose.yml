@@ -11,7 +11,9 @@ services:
       - POSTGRES_PASSWORD=api
       - POSTGRES_HOST=db
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - DEBUG=True
+      - DEBUG=False
+      - LOCAL_DEBUG=False
+      - BASE_WORKING_DIR=~
     ports:
       - "8000:8000"
     depends_on:

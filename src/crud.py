@@ -1,3 +1,4 @@
+from io import BytesIO
 from logging import getLogger
 
 from celery import chain
@@ -6,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from src import models
 from src import schemas
-from src.file_repository import FileRepository
-from src.settings import DEBUG
+from src.file_repository import FileRepository, RemoteFileRepository, LocalFileRepository
+from src.settings import DEBUG, LOCAL_DEBUG, BASE_WORKING_DIR
 from src.utils.common import generate_public_id
 from src.utils.ml_processing import tasks as ml_tasks
 from src.utils.s3_client import get_s3_client
@@ -15,47 +16,48 @@ from src.utils.youtube import get_yt_stream_and_name
 
 logger = getLogger()
 
+if LOCAL_DEBUG:
+    file_repo_klass = LocalFileRepository
+else:
+    file_repo_klass = RemoteFileRepository
+
 
 async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject:
     # TODO: content_type (MIME type / media type) (e.g. image/jpeg)
     # 100MB = 100 * 1024 (kb) * 1024 (mb)
     max_size_bytes = 100 * (1024 ** 2)
-    # content = await file.read(max_size_bytes)
-    # content = BytesIO(content)
-    #
-    # public_id = generate_public_id()
-    # s3_url = upload_file_to_s3(content, public_id)
+    content = await file.read(max_size_bytes)
+    content = BytesIO(content)
 
-    # obj = models.ProcessedObject(
-    #     source_link=s3_url,
-    #     original_name=file.filename,
-    #     public_id='d6b53eb8-1526-11ef-bb2a-9a1744b66515',
-    # )
+    public_id = generate_public_id()
+
+    file_repo = file_repo_klass(
+            public_id,
+            base_directory=BASE_WORKING_DIR,
+            s3_client=get_s3_client()
+        )
+
+    uploaded_video = file_repo.save_file_from_stream(
+        file_repo.get_file('uploaded_video'),
+        content
+    )
+
     obj = models.ProcessedObject(
-        source_link='https://ds-dev-video-storage.s3.amazonaws.com/d6b53eb8-1526-11ef-bb2a-9a1744b66515?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=***REDACTED-AWS-KEY-ID***%2F20240522%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20240522T151611Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=df4ca4411c30a904a72abaf557537495b7eb3630cb652edceb672995d80b9f7d',
+        source_link=uploaded_video.s3_url,
         original_name=file.filename,
-        public_id='d6b53eb8-1526-11ef-bb2a-9a1744b66515',
-    )
-    # https://ds-dev-video-storage.s3.amazonaws.com/67dfc79a-174e-11ef-9ce3-9a1744b66515?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=***REDACTED-AWS-KEY-ID***%2F20240521%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20240521T084502Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=318cc0f2d07a481bb398a6df73a6f539a5075cd337e0aeedbd85b2c877f0c868
-    # db.add(obj)
-    # db.commit()
-    # db.refresh(obj)
-    #
-    # print(obj.source_link)
-    # print(obj.public_id)
-    file_repo = FileRepository(
-        '/Users/nikolaypakhtusov/Documents/doublespeak/api',
-        get_s3_client()
+        public_id=public_id,
     )
 
-    uploaded_video = file_repo.get_file('uploaded_video')
-    uploaded_video.s3_url = obj.source_link
+    if not DEBUG:
+        db.add(obj)
+        db.commit()
+        db.refresh(obj)
 
-    ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, uploaded_video),
-                        ml_tasks.speaker_encoder.s(obj.public_id, obj.source_link),
-                        ml_tasks.text_to_speech.s(obj.public_id, obj.source_link))
+        ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, uploaded_video),
+                            ml_tasks.speaker_encoder.s(obj.public_id, obj.source_link),
+                            ml_tasks.text_to_speech.s(obj.public_id, obj.source_link))
     if DEBUG:
-        ml_tasks.speech_to_text(obj.public_id, uploaded_video)
+        ml_tasks.speech_to_text(public_id, uploaded_video, file_repo)
         # ml_pipeline.apply()
     else:
         ml_pipeline()
