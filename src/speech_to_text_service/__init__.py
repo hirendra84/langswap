@@ -9,6 +9,8 @@ from logging import getLogger
 
 import requests
 
+from src.api_client import APIClient
+from src.enums import ProcessStatus
 from src.ffmpeg import FFmpegClient
 from src.pipeline_models import TextedSegment, VideoTranslation
 from src.speech_to_text_service import asr_client
@@ -24,12 +26,13 @@ class SpeechToTextManager:
     public_id: str
 
     _asr_client: ASRClient
+    _api_client: APIClient
     sample_rate: int = 16_000
 
-    def __init__(self, public_id: str, directory: str = None):
+    def __init__(self, public_id: str, api_client: APIClient, directory: str = None):
         self.public_id = public_id
         self._asr_client = ASRClient("PMKV2A3076HULPET7XZSF7IITZP5H8SWICSCFI3L")
-
+        self._api_client = api_client
         if directory is None:
             directory = os.path.join('/Users/nikolaypakhtusov/', 'data', public_id)
 
@@ -54,6 +57,11 @@ class SpeechToTextManager:
         video_name = self._download_video(video_translation.source_url)
         audio_file_name = self._extract_audio(video_name)
 
+        self._api_client.update_video(self.public_id,
+                                      video_translation,
+                                      progress=10,
+                                      status=ProcessStatus.in_progress)
+
         with open(os.path.join(self.directory, audio_file_name), 'rb') as f:
             extracted_audio_link = upload_file_to_s3(io.BytesIO(f.read()), self.public_id)
 
@@ -63,6 +71,11 @@ class SpeechToTextManager:
             vad_filtered_audio_link = upload_file_to_s3(io.BytesIO(f.read()), self.public_id)
 
         transcription = self._asr_client.transcribe(vad_filtered_audio_link)
+
+        self._api_client.update_video(self.public_id,
+                                      video_translation,
+                                      progress=30,
+                                      status=ProcessStatus.in_progress)
 
         segments = self._remap_sentences(transcription.word_timestamps)
 

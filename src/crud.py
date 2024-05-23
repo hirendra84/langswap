@@ -31,7 +31,7 @@ async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject
     #     public_id='d6b53eb8-1526-11ef-bb2a-9a1744b66515',
     # )
     obj = models.ProcessedObject(
-        source_link='https://ds-dev-video-storage.s3.amazonaws.com/67dfc79a-174e-11ef-9ce3-9a1744b66515?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=***REDACTED-AWS-KEY-ID***%2F20240521%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20240521T084502Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=318cc0f2d07a481bb398a6df73a6f539a5075cd337e0aeedbd85b2c877f0c868',
+        source_link='https://ds-dev-video-storage.s3.amazonaws.com/d6b53eb8-1526-11ef-bb2a-9a1744b66515?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=***REDACTED-AWS-KEY-ID***%2F20240522%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20240522T151611Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=df4ca4411c30a904a72abaf557537495b7eb3630cb652edceb672995d80b9f7d',
         original_name=file.filename,
         public_id='d6b53eb8-1526-11ef-bb2a-9a1744b66515',
     )

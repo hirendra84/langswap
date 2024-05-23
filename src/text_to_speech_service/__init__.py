@@ -6,7 +6,8 @@ import torchaudio
 
 from logging import getLogger
 
-
+from src.api_client import APIClient
+from src.enums import ProcessStatus
 from src.ffmpeg import FFmpegClient
 from src.pipeline_models import VideoTranslation
 from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
@@ -22,14 +23,15 @@ class TextToSpeechManager:
     public_id: str
 
     _tts_client: TTSClient
+    _api_client: APIClient
     sample_rate: int = 16_000
     tts_sample_rate: int = 44_100
     audio_dubbing_manager: AudioDubbingManager
 
-    def __init__(self, public_id: str, directory: str = None):
+    def __init__(self, public_id: str, api_client: APIClient, directory: str = None):
         self.public_id = public_id
         self._tts_client = ElevenLabsTTSClient('f805d6de7a8d5d6f7c0341e62b24b98a')
-
+        self._api_client = api_client
         if directory is None:
             directory = os.path.join('/Users/nikolaypakhtusov/', 'data', public_id)
 
@@ -73,7 +75,7 @@ class TextToSpeechManager:
 
         with open(resulted_video_path, 'rb') as f:
             processed_video_link = upload_file_to_s3(io.BytesIO(f.read()), self.public_id)
-        return VideoTranslation(
+        new_video_translation = VideoTranslation(
             source_url=video_translation.source_url,
             extracted_audio_url=video_translation.extracted_audio_url,
             vad_filtered_audio_url=video_translation.vad_filtered_audio_url,
@@ -81,6 +83,11 @@ class TextToSpeechManager:
             translated_texts=video_translation.translated_texts,
             processed_video=processed_video_link,
         )
+        self._api_client.update_video(self.public_id,
+                                      new_video_translation,
+                                      progress=10,
+                                      status=ProcessStatus.done)
+        return new_video_translation
 
     def _merge_background(self, source_audio_file_path: str, voice_audio_path: str) -> str:
         target_file_path = os.path.join(self.directory, 'demucs_result.wav')

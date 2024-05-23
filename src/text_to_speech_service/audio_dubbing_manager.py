@@ -1,6 +1,7 @@
 import os
 from typing import Iterator
 
+import elevenlabs
 import numpy as np
 import torchaudio
 
@@ -40,7 +41,7 @@ class AudioDubbingManager:
         )
         for i, audio in enumerate(audios):
             generated_audio_path = os.path.join(self.directory, f"generated_audio_pt{i}.wav")
-            torchaudio.save(audio, generated_audio_path)
+            elevenlabs.save(audio, generated_audio_path)
             df.loc[i, 'syn_audio_path'] = generated_audio_path
 
         # df['gen_dur'] = df['syn_audio_path'].apply(lambda x: FFmpegClient().get_audio_length(x))
@@ -60,7 +61,7 @@ class AudioDubbingManager:
 
     def _merge_audio_timestamps(self, df: pd.DataFrame, video_length: float, sample_rate: int)\
             -> tuple[torch.Tensor, str]:
-        concated_audio_tensor = torch.zeros((1, int(video_length * sample_rate)))
+        concated_audio_tensor = torch.zeros((1, int(video_length * sample_rate * 1.1)))
 
         for i, line in tqdm(df.iterrows(), total=df.shape[0]):
             wav, sr = torchaudio.load(line.syn_audio_path)
@@ -74,7 +75,10 @@ class AudioDubbingManager:
             end_pos = start_pos + wav.shape[-1]
 
             print(f'try_num, {i}')
-            concated_audio_tensor[0, start_pos: int(end_pos)] = wav[0]
+            try:
+                concated_audio_tensor[0, start_pos: int(end_pos)] = wav[0]
+            except RuntimeError:
+                print()
             # torch.frombuffer(bytes, dtype=torch.int32)
 
         generated_audio_path = os.path.join(self.directory, "merged_audio.wav")
