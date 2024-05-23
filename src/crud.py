@@ -1,4 +1,3 @@
-from io import BytesIO
 from logging import getLogger
 
 from celery import chain
@@ -7,9 +6,11 @@ from sqlalchemy.orm import Session
 
 from src import models
 from src import schemas
+from src.file_repository import FileRepository
 from src.settings import DEBUG
-from src.utils.common import upload_file_to_s3, generate_public_id
+from src.utils.common import generate_public_id
 from src.utils.ml_processing import tasks as ml_tasks
+from src.utils.s3_client import get_s3_client
 from src.utils.youtube import get_yt_stream_and_name
 
 logger = getLogger()
@@ -42,12 +43,19 @@ async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject
     #
     # print(obj.source_link)
     # print(obj.public_id)
+    file_repo = FileRepository(
+        '/Users/nikolaypakhtusov/Documents/doublespeak/api',
+        get_s3_client()
+    )
 
-    ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, obj.source_link),
+    uploaded_video = file_repo.get_file('uploaded_video')
+    uploaded_video.s3_url = obj.source_link
+
+    ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, uploaded_video),
                         ml_tasks.speaker_encoder.s(obj.public_id, obj.source_link),
                         ml_tasks.text_to_speech.s(obj.public_id, obj.source_link))
     if DEBUG:
-        ml_tasks.speech_to_text(obj.public_id, obj.source_link)
+        ml_tasks.speech_to_text(obj.public_id, uploaded_video)
         # ml_pipeline.apply()
     else:
         ml_pipeline()
@@ -60,10 +68,17 @@ async def process_video_by_link(db: Session, data: schemas.CreateProcessedObject
     video_data, video_title = get_yt_stream_and_name(data.link)
 
     public_id = generate_public_id()
-    s3_url = upload_file_to_s3(video_data, public_id)
+    file_repo = FileRepository(
+        '',
+        get_s3_client()
+    )
+
+    video_file = file_repo.get_file('uploaded_video')
+
+    video_file = file_repo.save_file_from_stream(video_file, video_data)
 
     obj = models.ProcessedObject(
-        source_link=s3_url,
+        source_link=video_file.s3_url,
         original_name=video_title,
         public_id=public_id,
     )

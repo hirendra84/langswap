@@ -29,7 +29,7 @@ class APIClient:
             data['translated'] = [segment.translation for segment in video_translation.translated_texts]
 
         if video_translation.processed_video:
-            data['prepared_link'] = video_translation.processed_video
+            data['prepared_link'] = video_translation.processed_video.s3_url
         return data
 
     def update_video(self, public_id, video_translation: VideoTranslation, progress: int, status: ProcessStatus):

@@ -4,11 +4,13 @@ import requests
 from celery import Celery
 
 from src.api_client import MockAPIClient, APIClient
+from src.file_repository import FileRepository, RemoteFile
 from src.pipeline_models import VideoTranslation
 from src.settings import DEBUG, BACKEND_URL
 from src.speech_to_text_service import SpeechToTextManager
 from src.text_to_speech_service import TextToSpeechManager
 from src.translation_service import TranslationManager
+from src.utils.s3_client import get_s3_client
 
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost')
 
@@ -45,15 +47,18 @@ api_client = api_client_klass(BACKEND_URL)
 @app.task(autoretry_for=(requests.HTTPError, requests.ConnectionError),
           retry_kwargs={'max_retries': 5},
           default_retry_delay=3)  # 3 sec
-def speech_to_text(public_id: str, file_link: str):
-    pass
+def speech_to_text(public_id: str, file: RemoteFile):
     print('AMAMLBACKEND')
-    print(file_link)
-    manager = SpeechToTextManager(public_id, api_client)
-    video_translation = manager.extract_and_transcribe(VideoTranslation(source_url=file_link))
+    print(file.s3_url)
+    file_repository = FileRepository(
+        directory=os.path.join('/Users/nikolaypakhtusov/', 'data', public_id),
+        s3_client=get_s3_client()
+    )
+    manager = SpeechToTextManager(public_id, api_client, file_repository)
+    video_translation = manager.extract_and_transcribe(VideoTranslation(source_file=file))
     manager = TranslationManager(public_id, api_client)
     video_translation = manager.translate(video_translation)
-    manager = TextToSpeechManager(public_id, api_client)
+    manager = TextToSpeechManager(public_id, api_client, file_repository)
     video_translation = manager.synthesize(video_translation)
     print(video_translation)
 

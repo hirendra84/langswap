@@ -1,76 +1,67 @@
-import io
-import os.path
-
 import pandas as pd
 
 import spacy
 
 from logging import getLogger
 
-import requests
-
 from src.api_client import APIClient
 from src.enums import ProcessStatus
 from src.ffmpeg import FFmpegClient
+from src.file_repository import FileRepository, RemoteFile
 from src.pipeline_models import TextedSegment, VideoTranslation
 from src.speech_to_text_service import asr_client
 from src.speech_to_text_service.asr_client import ASRClient
 from src.speech_to_text_service.vad_client import VadClient
-from src.utils import upload_file_to_s3
 
 logger = getLogger(__name__)
 
 
 class SpeechToTextManager:
-    directory: str
     public_id: str
 
     _asr_client: ASRClient
     _api_client: APIClient
+    _file_repository: FileRepository
     sample_rate: int = 16_000
 
-    def __init__(self, public_id: str, api_client: APIClient, directory: str = None):
+    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository):
         self.public_id = public_id
         self._asr_client = ASRClient("PMKV2A3076HULPET7XZSF7IITZP5H8SWICSCFI3L")
         self._api_client = api_client
-        if directory is None:
-            directory = os.path.join('/Users/nikolaypakhtusov/', 'data', public_id)
+        self._file_repository = file_repository
 
-        self.directory = directory
+    def _resample_audio(self, audio_file: RemoteFile) -> RemoteFile:
 
-    def _resample_audio(self, audio_file_name: str) -> str:
-
-        resampled_audio_path = os.path.join(self.directory, f'{audio_file_name}_resampled_{self.sample_rate}')
+        # resampled_audio_path = os.path.join(self.directory, )
+        resampled_audio_file = self._file_repository.get_file(f'{audio_file.name}_resampled_{self.sample_rate}')
         (FFmpegClient()
-         .resample_audio(os.path.join(self.directory, audio_file_name),
-                         resampled_audio_path,
+         .resample_audio(audio_file.file_path,
+                         resampled_audio_file.file_path,
                          sample_rate=self.sample_rate))
-        vad_filtered_audio_path = f'{resampled_audio_path}_vad'
-        vad_filtered_audio_path = VadClient().vad_filter(resampled_audio_path,
-                                                         vad_filtered_audio_path,
-                                                         self.sample_rate)
-        return vad_filtered_audio_path
+        vad_filtered_audio_file = self._file_repository.get_file(f'{resampled_audio_file.name}_vad')
+
+        vad_filtered_audio_file.file_path = VadClient().vad_filter(
+            resampled_audio_file.file_path,
+            vad_filtered_audio_file.file_path,
+            self.sample_rate)
+        return vad_filtered_audio_file
 
     def extract_and_transcribe(self, video_translation: VideoTranslation) -> VideoTranslation:
-        os.makedirs(self.directory, exist_ok=True)
 
-        video_name = self._download_video(video_translation.source_url)
-        audio_file_name = self._extract_audio(video_name)
+        video_name = self._file_repository.materialize_file(video_translation.source_file)
+
+        audio_file = self._extract_audio(video_name.file_path)
+        audio_file = self._file_repository.save_file(audio_file)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,
                                       progress=10,
                                       status=ProcessStatus.in_progress)
 
-        with open(os.path.join(self.directory, audio_file_name), 'rb') as f:
-            extracted_audio_link = upload_file_to_s3(io.BytesIO(f.read()), self.public_id)
+        vad_filtered_audio_file = self._resample_audio(audio_file)
+        vad_filtered_audio_file = self._file_repository.save_file(vad_filtered_audio_file, force=True)
 
-        vad_filtered_audio_path = self._resample_audio(audio_file_name)
-
-        with open(vad_filtered_audio_path, 'rb') as f:
-            vad_filtered_audio_link = upload_file_to_s3(io.BytesIO(f.read()), self.public_id)
-
-        transcription = self._asr_client.transcribe(vad_filtered_audio_link)
+        transcription = self._asr_client.transcribe(vad_filtered_audio_file.s3_url)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,
@@ -80,32 +71,26 @@ class SpeechToTextManager:
         segments = self._remap_sentences(transcription.word_timestamps)
 
         return VideoTranslation(
-            source_url=video_translation.source_url,
-            extracted_audio_url=extracted_audio_link,
-            vad_filtered_audio_url=vad_filtered_audio_link,
+            source_file=video_translation.source_file,
+            extracted_audio=audio_file,
+            vad_filtered_audio=vad_filtered_audio_file,
             recognized_texts=segments,
             processed_video=video_translation.processed_video,
         )
 
-    def _download_video(self, url: str,
-                        file_name: str = 'downloaded_video',
-                        chunk_size: int = 8192):
-        with requests.get(url, stream=True) as response:
-            response.raise_for_status()
-            with open(os.path.join(self.directory, file_name), 'wb') as f:
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    f.write(chunk)
-        return file_name
+    def _download_video(self, file: RemoteFile):
+        return self._file_repository.materialize_file(file)
 
-    def _extract_audio(self, video_file_name, audio_file_name='extracted_audio') -> str:
+    def _extract_audio(self, video_file_path, audio_file_name='extracted_audio') -> RemoteFile:
         ffmpeg_client = FFmpegClient()
-        out, err = ffmpeg_client.extract_audio(os.path.join(self.directory, video_file_name),
-                                               os.path.join(self.directory, audio_file_name),
+        output_file = self._file_repository.get_file(audio_file_name)
+        out, err = ffmpeg_client.extract_audio(video_file_path,
+                                               output_file.file_path,
                                                time_limit=60)
         logger.info(out)
         logger.error(err)
 
-        return audio_file_name
+        return output_file
 
     def _remap_sentences(self, transcription: list[asr_client.WordTimestamp]) -> list[TextedSegment]:
         def load_spacy_model(language='xx') -> spacy.Language:

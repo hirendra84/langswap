@@ -44,14 +44,13 @@ class TranslationManager:
             )
 
         new_video_translation = VideoTranslation(
-            source_url=video_translation.source_url,
-            extracted_audio_url=video_translation.extracted_audio_url,
-            vad_filtered_audio_url=video_translation.vad_filtered_audio_url,
+            source_file=video_translation.source_file,
+            extracted_audio=video_translation.extracted_audio,
+            vad_filtered_audio=video_translation.vad_filtered_audio,
             recognized_texts=segments,
             translated_texts=translated_segments,
             processed_video=video_translation.processed_video,
         )
-
         self._api_client.update_video(self.public_id,
                                       new_video_translation,
                                       progress=60,

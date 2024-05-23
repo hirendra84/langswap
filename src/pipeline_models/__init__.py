@@ -1,5 +1,7 @@
 import attr
 
+from src.file_repository import RemoteFile
+
 
 @attr.s(auto_attribs=True)
 class TextedSegment:
@@ -18,9 +20,9 @@ class TranslatedTextedSegment:
 
 @attr.s(auto_attribs=True)
 class VideoTranslation:
-    source_url: str
-    extracted_audio_url: str = attr.ib(default='')
-    vad_filtered_audio_url: str = attr.ib(default='')
+    source_file: RemoteFile | None = attr.ib(default=None)
+    extracted_audio: RemoteFile | None = attr.ib(default=None)
+    vad_filtered_audio: RemoteFile | None = attr.ib(default=None)
     recognized_texts: list[TextedSegment] = attr.field(factory=list)
     translated_texts: list[TranslatedTextedSegment] = attr.field(factory=list)
-    processed_video: str = attr.ib(default='')
+    processed_video: RemoteFile | None = attr.ib(default=None)
