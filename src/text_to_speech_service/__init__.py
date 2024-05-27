@@ -1,6 +1,8 @@
 import torch
 import torchaudio
 
+import pandas as pd
+import os
 from logging import getLogger
 
 from src.api_client import APIClient
@@ -10,7 +12,10 @@ from src.file_repository import FileRepository, RemoteFile
 from src.pipeline_models import VideoTranslation
 from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 from src.text_to_speech_service.demucs_client import DemucsClient
-from src.text_to_speech_service.tts_client import TTSClient, ElevenLabsTTSClient
+from src.text_to_speech_service.tts_client import TTSClient, XTTSClient
+from src.speech_to_text_service.vad_client import VadClient
+import torchaudio.transforms as transforms
+from pyrubberband.pyrb import time_stretch
 
 logger = getLogger(__name__)
 
@@ -21,52 +26,96 @@ class TextToSpeechManager:
     _tts_client: TTSClient
     _api_client: APIClient
     _file_repository: FileRepository
-    sample_rate: int = 16_000
-    tts_sample_rate: int = 44_100
+    sample_rate: int = 48_000
+    tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
     def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository):
         self.public_id = public_id
-        self._tts_client = ElevenLabsTTSClient('f805d6de7a8d5d6f7c0341e62b24b98a')
         self._api_client = api_client
         self._file_repository = file_repository
 
         self.audio_dubbing_manager = AudioDubbingManager(self.tts_sample_rate,
                                                          file_repository)
+        self._tts_client = XTTSClient(file_repository=file_repository)
+    
+    def get_audio_length(self, audio_path):
+        audio, sr = torchaudio.load(audio_path)
+        return audio.shape[1] / sr
+
+    def sanity_check(self, df, target_sample_rate):
+        # TODO: delete it. 
+        for row in df.iterrows():
+            AudioDubbingManager.resample_save(row[1].styled_generated_path,
+                        target_sr=target_sample_rate)
 
     def synthesize(self, video_translation: VideoTranslation) -> VideoTranslation:
 
-        vad_filtered_audio_file = self._file_repository.materialize_file(
-            video_translation.vad_filtered_audio
-        )
+        vocals_audio = self._file_repository.get_file("vocals.wav")
 
-        voice = self._tts_client.clone_voice(vad_filtered_audio_file.file_path)
-        audios = self._tts_client.generate_audio(video_translation.recognized_texts, voice)
+        db_manager = AudioDubbingManager(file_repository=self._file_repository,
+                                        tts_sample_rate=self.tts_sample_rate)
+        
+        # vocal file 44100 -> 16000 for vad
+        db_manager.resample_save(vocals_audio.file_path, target_sr=16000)
+
+        vad_filtered_audio_file = self._file_repository.get_file(f'{vocals_audio.name}_vad')
+        vad_filtered_audio_file.file_path = VadClient().vad_filter(
+            vocals_audio.file_path,
+            vad_filtered_audio_file.file_path,
+            sample_rate=16000)
+        
+        AudioDubbingManager.resample_save(vad_filtered_audio_file.file_path,
+                        target_sr=self.tts_sample_rate)
+        
+        # split source -> generate tts -> style from tts
+        df = db_manager.split_audio_seconds(video_translation.translated_texts,
+                                        vocals_audio.file_path,
+                                        sample_rate=self.tts_sample_rate)
+        
+        df_generated_audio = self._tts_client.generate_audio(
+                    video_translation.translated_texts,
+                    vad_filtered_audio_file,
+                    df)
+        
+        df_styled_audio = self._tts_client.style_audio(
+                    df_generated_audio)
+        # resample audio to the previous sample rate (!)
+        self.sanity_check(df_styled_audio, self.sample_rate)
 
         extracted_audio_file = self._file_repository.materialize_file(
             video_translation.extracted_audio
         )
         video_length = FFmpegClient().get_audio_length(extracted_audio_file.file_path)
 
-        generated_audio = self.audio_dubbing_manager.dub(
-            video_translation.recognized_texts,
-            audios,
-            video_length,
+        generated_audio = self.merge_timestamps_speedup(
+            df_styled_audio,
+            video_length=video_length,
+            source_sample_rate=self.sample_rate
         )
+
+        # TODO: save correctly if need on the s3
+        styled_audio_path = os.path.join(self._file_repository.directory, "styled_full_audio.wav")
+        torchaudio.save(styled_audio_path, generated_audio, self.sample_rate)
+        # final_audio = self._file_repository.get_file('styled_full_audio.wav')
+
+        resulted_audio = DemucsClient().merge_background(
+                    styled_audio_path,
+                    self._file_repository)
+        
+        result_audio_path = os.path.join(self._file_repository._directory, "resulted_audio.wav")
+        torchaudio.save(result_audio_path, resulted_audio, self.sample_rate)
+
+        resulted_video = self._file_repository.get_file('resulted_video.mp4')
 
         source_video = self._file_repository.materialize_file(
             video_translation.source_file
         )
 
-        resulted_audio = self._merge_background(
-            source_audio_file_path=extracted_audio_file.file_path,
-            voice_audio_path=generated_audio.file_path)
-
-        resulted_video = self._file_repository.get_file('resulted_video.mp4')
-
+        # TODO: it will not work without not saved properly resulted video
         FFmpegClient().replace_audio(source_video.file_path,
-                                     resulted_audio.file_path,
-                                     resulted_video.file_path)
+                                    result_audio_path,
+                                    resulted_video.file_path)
         self._file_repository.save_file(resulted_video)
 
         new_video_translation = VideoTranslation(
@@ -85,33 +134,51 @@ class TextToSpeechManager:
 
         return new_video_translation
 
-    def _merge_background(self, source_audio_file_path: str, voice_audio_path: str) -> RemoteFile:
-        demucs_result_file = self._file_repository.get_file('demucs_result.wav')
-        DemucsClient().separate(source_file_path=source_audio_file_path,
-                                target_file_path=demucs_result_file.file_path)
+    def merge_timestamps_speedup(self, df, video_length, source_sample_rate):
+        """
+        Algorithm that work on time stretching - not the best one.
+        """
+        df['gen_dur'] = df['styled_generated_path'].apply(lambda audio_path: self.get_audio_length(audio_path))
+        df['pause'] = df['start'].shift(-1) - df['end'] # пауза между двумя предложениями 
+        df['pause'] = df['pause'].fillna(0)
+        df['dur_gen_pause'] = df['gen_dur'] + df['pause'] # длина сгенерированной речи + пауза, которую можно сделать 
+        df['place_gen'] = df['end'] - df['start'] + df['pause'] # место, которое можно поставить для сгенерированной фразы 
+        df['need_time'] = df['gen_dur'] - df['place_gen'] # сколько времени необходимо, если < 0 - то, все ок, если > 0, то нужно что-то сделать  
+        df['new_start'] = df.apply(lambda x: x.start - x.need_time if x.need_time > 0 else x.start, axis=1)
+        df['need_speedup'] = df['gen_dur'] > df['place_gen']
+        df['duration_orig'] = df['end'] - df['start']
+        df['speed_rate'] = df['dur_gen_pause'] / df['duration_orig']
+        full_audio_blank = torch.zeros((1, int(video_length * source_sample_rate)))
 
-        background_sound, sr_back = torchaudio.load(voice_audio_path)
-        speech_audio, sr_speech = torchaudio.load(demucs_result_file.file_path)
-        assert sr_back == sr_speech, "Background sr is not equal to speech sr."
+        for i, line in df.iterrows():
+            audio, sr = torchaudio.load(line.styled_generated_path)
 
-        def _fix_tensor_len_by_cutting_to_min(first: torch.Tensor, second: torch.Tensor) \
-                -> tuple[torch.Tensor, torch.Tensor]:
-            min_length = min(first.shape[-1], second.shape[-1])
+            start = line.start
+                    
+            audio = time_stretch(audio.squeeze().numpy(), sr, rate=line.speed_rate)
+            audio = torch.tensor(audio).unsqueeze(0)
 
-            def _slice_multidimensional(tensor: torch.Tensor) -> torch.Tensor:
-                split = torch.split(tensor, min_length, dim=(tensor.shape[0] - 1))
-                return split[0]
+            start_pos = int(start*source_sample_rate)
+            end_pos = int(start_pos + audio.shape[-1])
+            
+            full_audio_blank[0, int(start_pos): int(end_pos)] = audio[0]
+        return full_audio_blank
 
-            first = _slice_multidimensional(first)
-            second = _slice_multidimensional(second)
+    def merge_timestamps_stretch_whole(self, df):
+        previous_pause = torch.zeros((1, int(df.iloc[0].start * self.sample_rate)))
+        audio_first, sr = torchaudio.load(df.iloc[0].styled_generated_path)
+        pause = torch.zeros((1, int(df.iloc[0].pause * self.sample_rate)))
 
-            return first, second
+        audio_first = torch.cat((previous_pause, audio_first, pause), dim=1)
 
-        background_sound, speech_audio = _fix_tensor_len_by_cutting_to_min(background_sound, speech_audio)
+        for i, line in df.iterrows():
+            audio, sr = torchaudio.load(line.styled_generated_path)
+            pause = torch.zeros((1, int(line.pause * self.sample_rate)))
 
-        common_sound = background_sound + speech_audio
+            if i == 0:
+                continue
 
-        merged_with_background_audio = self._file_repository.get_file("merged_with_background.wav")
-        torchaudio.save(merged_with_background_audio.file_path, common_sound, sample_rate=self.tts_sample_rate)
-
-        return merged_with_background_audio
+            audio_first = torch.cat((audio_first, audio), dim=1)
+            audio_first = torch.cat((audio_first, pause), dim=1)
+        # add end pause
+        return audio_first

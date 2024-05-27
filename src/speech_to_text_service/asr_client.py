@@ -65,8 +65,6 @@ class ASRClient:
 
         url = "https://api.runpod.ai/v2/faster-whisper/runsync"
 
-        print(source_url)
-
         payload = {
             "input": {
                 "audio": source_url,

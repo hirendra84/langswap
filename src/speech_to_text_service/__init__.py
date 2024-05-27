@@ -12,6 +12,7 @@ from src.pipeline_models import TextedSegment, VideoTranslation
 from src.speech_to_text_service import asr_client
 from src.speech_to_text_service.asr_client import ASRClient
 from src.speech_to_text_service.vad_client import VadClient
+from src.text_to_speech_service.demucs_client import DemucsClient
 
 logger = getLogger(__name__)
 
@@ -57,11 +58,12 @@ class SpeechToTextManager:
                                       video_translation,
                                       progress=10,
                                       status=ProcessStatus.in_progress)
+        
+        background_files = DemucsClient().separate(audio_file, self._file_repository)
 
-        vad_filtered_audio_file = self._resample_audio(audio_file)
-        vad_filtered_audio_file = self._file_repository.save_file(vad_filtered_audio_file, force=True)
-
-        transcription = self._asr_client.transcribe(vad_filtered_audio_file.s3_url)
+        # transcribe only according to the vocals
+        vocal_file = self._file_repository.get_file("vocals.wav")
+        transcription = self._asr_client.transcribe(vocal_file.s3_url)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,
@@ -73,7 +75,7 @@ class SpeechToTextManager:
         return VideoTranslation(
             source_file=video_translation.source_file,
             extracted_audio=audio_file,
-            vad_filtered_audio=vad_filtered_audio_file,
+            background_audio=background_files,
             recognized_texts=segments,
             processed_video=video_translation.processed_video,
         )
@@ -93,6 +95,7 @@ class SpeechToTextManager:
         return output_file
 
     def _remap_sentences(self, transcription: list[asr_client.WordTimestamp]) -> list[TextedSegment]:
+        # TODO: can be removed 
         def load_spacy_model(language='xx') -> spacy.Language:
             spacy_languages = {
                 'en': "en_core_web_sm",

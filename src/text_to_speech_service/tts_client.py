@@ -6,6 +6,12 @@ from elevenlabs.client import ElevenLabs
 from tqdm.auto import tqdm
 
 from src.pipeline_models import TextedSegment
+from TTS.api import TTS
+import os
+from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
+from src.speech_to_text_service.vad_client import VadClient
+from src.file_repository import FileRepository
+import torchaudio
 
 
 class TTSClient(ABC):
@@ -20,62 +26,52 @@ class TTSClient(ABC):
         ...
 
 
-class ElevenLabsTTSClient(TTSClient):
+class XTTSClient:
+    def __init__(self,
+                file_repository: FileRepository,
+                tts_model_id="tts_models/multilingual/multi-dataset/xtts_v2",
+                style_model_id="voice_conversion_models/multilingual/vctk/freevc24",
+                language="en"):
+        self.tts = TTS(tts_model_id)
+        self.style_tts = TTS(model_name=style_model_id, progress_bar=False)
 
-    _client: ElevenLabs
+        self._file_repository = file_repository
 
-    def __init__(self, api_key: str):
-        super().__init__(api_key)
-        self._client = ElevenLabs(api_key=api_key)
+        self.lang = language
 
-    def clone_voice(self,
-                    voice_path: str,
-                    voice_descr: str = 'Default description',
-                    voice_name: str = 'Default voice') -> elevenlabs.Voice:
-        exception = None
-        for _ in range(10):
-            try:
-                voice = self._client.clone(voice_name, description=voice_descr,
-                                           files=[voice_path])
-                return voice
-            except elevenlabs.core.api_error.ApiError as e:
-                exception = e
-                self._remove_first_voice()
-        else:
-            raise exception
+    def get_audio_length(audio_path):
+        audio, sr = torchaudio.load(audio_path)
+        return audio.shape[1] / sr
+    
+    def generate_audio(self, data: list[TextedSegment], source_audio, df):
+        """
+        Creates a VAD filtered audio file, generates the audio samples based on this voice.
+        """
+        # dum a file - with resample if needed, caution - long file
+        # TODO: rewrite to one file pipeline
+        temp_folder = os.path.join(self._file_repository._directory,
+                                "generated_audio")
+        os.makedirs(temp_folder, exist_ok=True)
 
-    def _remove_first_voice(self):
-        voices = self._client.voices.get_all().voices
-        for voice in voices:
-            if voice.category != 'cloned':
-                continue
-            voice_id = voice.voice_id
-            self._client.voices.delete(voice_id)
-            return
+        for idx, segment in enumerate(data):
+            save_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")
+            self.tts.tts_to_file(text=segment.translation, file_path=save_path, speaker_wav=source_audio.file_path, language=self.lang)
 
-    def generate_audio(self, data: list[TextedSegment], voice: elevenlabs.Voice) -> list[Iterator[bytes]]:
-        audios: list[Iterator[bytes]] = []
-        for i, segment in enumerate(data):
-            audio: Iterator[bytes] = self._client.generate(text=segment.text, voice=voice)
-            audios.append(audio)
+            df.loc[idx, "generated_path"] = save_path
+        return df
+    
+    def style_audio(self, df):
+        """
+        : audio_vad_path: audio path cleaned from the background noise (can be VAD filtered speech)
+        """
+        temp_folder = os.path.join(self._file_repository._directory, "styled_generated_audio")
+        os.makedirs(temp_folder, exist_ok=True)
 
-        return audios
+        for row in tqdm(df.iterrows()):
+            idx = row[0]
+            
+            save_path = os.path.join(temp_folder, f"{row[1].start}_{row[1].end}.wav")
+            df.loc[idx, 'styled_generated_path'] = save_path
 
-        #     generated_audio_path = os.path.join(self.cfg.temp_dir, f"{i}.wav")
-        #     save(audio, generated_audio_path)
-        #     df.loc[i, 'syn_audio_path'] = generated_audio_path
-        #
-        # df['gen_dur'] = df['syn_audio_path'].apply(lambda x: torchaudio.load(x)[0].shape[1] / self.cfg.tts_sample_rate)
-        # df['pause'] = df['start'].shift(-1) - df['end']
-        # df['dur_gen_pause'] = df['gen_dur'] + df['pause']
-        # df['place_gen'] = df['end'] - df['start'] + df['pause']
-        # df['gen_end'] = df['start'] + df['gen_dur']
-        # df['can_start'] = [0] + df['gen_end'].to_list()[:-1]
-        # df['need_time'] = df['gen_dur'] - df['place_gen']
-        # df['new_start'] = df.apply(lambda x: x.start - x.need_time if x.need_time > 0 else x.start, axis=1)
-        # df['need_speedup'] = df['gen_dur'] > df['place_gen']
-        # df['duration_orig'] = df['end'] - df['start']
-        # return df
-
-
-
+            self.style_tts.voice_conversion_to_file(source_wav=row[1].generated_path, target_wav=row[1].source_path, file_path=save_path)
+        return df
