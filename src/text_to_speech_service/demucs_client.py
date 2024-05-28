@@ -4,24 +4,23 @@ import torchaudio
 import os
 from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 
+
 class DemucsClient:
+    _separator: demucs.api.Separator
+
     def __init__(self):
-        pass
+        self._separator = demucs.api.Separator()
 
-    def separate(self, audio_file: str, repo):
-        separator = demucs.api.Separator()
-        source_file_path = repo.get_file(f'{audio_file.name}.wav')
-        source_file_path = audio_file.file_path
-
-        separated = separator.separate_audio_file(source_file_path)
+    def separate(self, audio_file_path: str, output_directory: str) -> list[tuple[str, str]]:
+        separated = self._separator.separate_audio_file(audio_file_path)
 
         background_files = []
         for file, source in separated[1].items():
-            save_audio = repo.get_file(f'{file}.wav')
-            demucs.api.save_audio(source, save_audio.file_path, samplerate=separator.samplerate)
-            save_audio = repo.save_file(save_audio, force=True)
+            file_name = f'{file}.wav'
+            generated_file_path = os.path.join(output_directory, file_name)
+            demucs.api.save_audio(source, generated_file_path, samplerate=self._separator.samplerate)
 
-            background_files.append(save_audio)
+            background_files.append((generated_file_path, file_name))
         return background_files
 
     def merge_background(self, generated_audio_path, repo,

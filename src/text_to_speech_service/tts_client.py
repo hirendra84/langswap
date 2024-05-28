@@ -5,7 +5,7 @@ import elevenlabs
 from elevenlabs.client import ElevenLabs
 from tqdm.auto import tqdm
 
-from src.pipeline_models import TextedSegment
+from src.pipeline_models import TextedSegment, TranslatedTextedSegment
 from TTS.api import TTS
 import os
 from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
@@ -16,61 +16,60 @@ import torchaudio
 
 class TTSClient(ABC):
 
-    def __init__(self, api_key: str):
+    def __init__(self):
         ...
 
     def clone_voice(self, voice_path: str, voice_descr: str = '', voice_name = '' ):
         ...
 
-    def generate_audio(self, data: list[TextedSegment], voice: elevenlabs.Voice) -> list[Iterator[bytes]]:
+    def generate_audio(self, data: list[TranslatedTextedSegment], output_folder: str, source_audio_path: str, lang: str) \
+            -> list[tuple[str, str]]:
+        ...
+
+    def style_audio(self, output_directory: str, df):
         ...
 
 
-class XTTSClient:
-    def __init__(self,
-                file_repository: FileRepository,
-                tts_model_id="tts_models/multilingual/multi-dataset/xtts_v2",
-                style_model_id="voice_conversion_models/multilingual/vctk/freevc24",
-                language="en"):
-        self.tts = TTS(tts_model_id)
-        self.style_tts = TTS(model_name=style_model_id, progress_bar=False)
+class XTTSClient(TTSClient):
+    def __init__(self):
+        super().__init__()
+        self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+        self.style_tts = TTS(model_name="voice_conversion_models/multilingual/vctk/freevc24", progress_bar=False)
 
-        self._file_repository = file_repository
-
-        self.lang = language
-
+    @staticmethod
     def get_audio_length(audio_path):
         audio, sr = torchaudio.load(audio_path)
         return audio.shape[1] / sr
     
-    def generate_audio(self, data: list[TextedSegment], source_audio, df):
+    def generate_audio(self, data: list[TranslatedTextedSegment], output_directory: str, source_audio_path: str, lang: str) \
+            -> list[tuple[str, str]]:
         """
         Creates a VAD filtered audio file, generates the audio samples based on this voice.
         """
         # dum a file - with resample if needed, caution - long file
         # TODO: rewrite to one file pipeline
-        temp_folder = os.path.join(self._file_repository._directory,
-                                "generated_audio")
-        os.makedirs(temp_folder, exist_ok=True)
 
+        file_name_paths = []
         for idx, segment in enumerate(data):
-            save_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")
-            self.tts.tts_to_file(text=segment.translation, file_path=save_path, speaker_wav=source_audio.file_path, language=self.lang)
-
-            df.loc[idx, "generated_path"] = save_path
-        return df
+            file_name = f"{segment.start}_{segment.end}.wav"
+            save_path = os.path.join(output_directory, file_name)
+            self.tts.tts_to_file(text=segment.translation,
+                                 file_path=save_path,
+                                 speaker_wav=source_audio_path,
+                                 language=lang)
+            file_name_paths.append((file_name, save_path))
+        return file_name_paths
     
-    def style_audio(self, df):
+    def style_audio(self, output_directory: str, df):
         """
         : audio_vad_path: audio path cleaned from the background noise (can be VAD filtered speech)
         """
-        temp_folder = os.path.join(self._file_repository._directory, "styled_generated_audio")
-        os.makedirs(temp_folder, exist_ok=True)
 
         for row in tqdm(df.iterrows()):
             idx = row[0]
+            file_name = f"{row[1].start}_{row[1].end}.wav"
             
-            save_path = os.path.join(temp_folder, f"{row[1].start}_{row[1].end}.wav")
+            save_path = os.path.join(output_directory, file_name)
             df.loc[idx, 'styled_generated_path'] = save_path
 
             self.style_tts.voice_conversion_to_file(source_wav=row[1].generated_path, target_wav=row[1].source_path, file_path=save_path)

@@ -24,13 +24,16 @@ class FileRepository(ABC):
     def materialize_file(self, file: RemoteFile) -> RemoteFile:
         ...
 
-    def get_file(self, file_name: str):
+    def get_file(self, file_name: str) -> RemoteFile:
         ...
 
     def save_file(self, file: RemoteFile, force: bool = False):
         ...
 
     def save_file_from_stream(self, file: RemoteFile, stream: io.BytesIO):
+        ...
+
+    def subdir(self, dir_name: str) -> str:
         ...
 
     @property
@@ -120,6 +123,11 @@ class RemoteFileRepository(FileRepository):
     def directory(self) -> str:
         return self._directory
 
+    def subdir(self, dir_name: str) -> str:
+        new_dir = os.path.join(self._directory, dir_name)
+        os.makedirs(new_dir, exist_ok=True)
+        return new_dir
+
 
 class LocalFileRepository(FileRepository):
     _directory: str
@@ -195,9 +203,16 @@ class LocalFileRepository(FileRepository):
         return RemoteFile(
             name=file.name,
             file_path=os.path.join(self._directory, file.name),
-            s3_url='fake_url',
+            s3_url=file.s3_url,
         )
 
     @property
     def directory(self) -> str:
         return self._directory
+
+    def subdir(self, dir_name: str) -> str:
+
+        new_dir = os.path.join(self._directory, dir_name)
+        os.makedirs(new_dir, exist_ok=True)
+        return new_dir
+

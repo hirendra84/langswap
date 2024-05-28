@@ -1,8 +1,6 @@
 import torch
 import torchaudio
 
-import pandas as pd
-import os
 from logging import getLogger
 
 from src.api_client import APIClient
@@ -14,7 +12,6 @@ from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 from src.text_to_speech_service.demucs_client import DemucsClient
 from src.text_to_speech_service.tts_client import TTSClient, XTTSClient
 from src.speech_to_text_service.vad_client import VadClient
-import torchaudio.transforms as transforms
 from pyrubberband.pyrb import time_stretch
 
 logger = getLogger(__name__)
@@ -37,7 +34,7 @@ class TextToSpeechManager:
 
         self.audio_dubbing_manager = AudioDubbingManager(self.tts_sample_rate,
                                                          file_repository)
-        self._tts_client = XTTSClient(file_repository=file_repository)
+        self._tts_client = XTTSClient()
     
     def get_audio_length(self, audio_path):
         audio, sr = torchaudio.load(audio_path)
@@ -51,10 +48,11 @@ class TextToSpeechManager:
 
     def synthesize(self, video_translation: VideoTranslation) -> VideoTranslation:
 
-        vocals_audio = self._file_repository.get_file("vocals.wav")
+        vocals_audio = video_translation.background_audio["vocals.wav"]
+        self._file_repository.materialize_file(vocals_audio)
 
         db_manager = AudioDubbingManager(file_repository=self._file_repository,
-                                        tts_sample_rate=self.tts_sample_rate)
+                                         tts_sample_rate=self.tts_sample_rate)
         
         # vocal file 44100 -> 16000 for vad
         db_manager.resample_save(vocals_audio.file_path, target_sr=16000)
@@ -65,21 +63,26 @@ class TextToSpeechManager:
             vad_filtered_audio_file.file_path,
             sample_rate=16000)
         
-        AudioDubbingManager.resample_save(vad_filtered_audio_file.file_path,
-                        target_sr=self.tts_sample_rate)
+        db_manager.resample_save(vad_filtered_audio_file.file_path,
+                                 target_sr=self.tts_sample_rate)
         
         # split source -> generate tts -> style from tts
-        df = db_manager.split_audio_seconds(video_translation.translated_texts,
-                                        vocals_audio.file_path,
-                                        sample_rate=self.tts_sample_rate)
-        
-        df_generated_audio = self._tts_client.generate_audio(
+        df = db_manager.split_audio_seconds(video_translation.recognized_texts,
+                                            vocals_audio.file_path,
+                                            sample_rate=self.tts_sample_rate)
+        generated_audio_folder = self._file_repository.subdir("generated_audio")
+        generated_audio_names_paths = self._tts_client.generate_audio(
                     video_translation.translated_texts,
-                    vad_filtered_audio_file,
-                    df)
-        
+                    generated_audio_folder,
+                    vad_filtered_audio_file.file_path,
+                    lang='en')
+
+        for idx, name_path in enumerate(generated_audio_names_paths):
+            df.loc[idx, "generated_path"] = name_path[1]  # path
+        styled_folder = self._file_repository.subdir('styled_generated_audio')
         df_styled_audio = self._tts_client.style_audio(
-                    df_generated_audio)
+                    styled_folder,
+                    df)
         # resample audio to the previous sample rate (!)
         self.sanity_check(df_styled_audio, self.sample_rate)
 
@@ -95,27 +98,25 @@ class TextToSpeechManager:
         )
 
         # TODO: save correctly if need on the s3
-        styled_audio_path = os.path.join(self._file_repository.directory, "styled_full_audio.wav")
-        torchaudio.save(styled_audio_path, generated_audio, self.sample_rate)
-        # final_audio = self._file_repository.get_file('styled_full_audio.wav')
+        styled_audio = self._file_repository.get_file("styled_full_audio.wav")
+        torchaudio.save(styled_audio.file_path, generated_audio, self.sample_rate)
 
         resulted_audio = DemucsClient().merge_background(
-                    styled_audio_path,
+                    styled_audio.file_path,
                     self._file_repository)
         
-        result_audio_path = os.path.join(self._file_repository._directory, "resulted_audio.wav")
-        torchaudio.save(result_audio_path, resulted_audio, self.sample_rate)
-
-        resulted_video = self._file_repository.get_file('resulted_video.mp4')
+        result_audio = self._file_repository.get_file("resulted_audio.wav")
+        torchaudio.save(result_audio.file_path, resulted_audio, self.sample_rate)
 
         source_video = self._file_repository.materialize_file(
             video_translation.source_file
         )
+        resulted_video = self._file_repository.get_file('resulted_video.mp4')
 
         # TODO: it will not work without not saved properly resulted video
         FFmpegClient().replace_audio(source_video.file_path,
-                                    result_audio_path,
-                                    resulted_video.file_path)
+                                     result_audio.file_path,
+                                     resulted_video.file_path)
         self._file_repository.save_file(resulted_video)
 
         new_video_translation = VideoTranslation(

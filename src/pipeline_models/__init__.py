@@ -23,7 +23,7 @@ class VideoTranslation:
     source_file: RemoteFile | None = attr.ib(default=None)
     extracted_audio: RemoteFile | None = attr.ib(default=None)
     vad_filtered_audio: RemoteFile | None = attr.ib(default=None)
-    background_audio: list[RemoteFile] = attr.field(factory=list)
+    background_audio: dict[str, RemoteFile] = attr.field(factory=dict)
     recognized_texts: list[TextedSegment] = attr.field(factory=list)
     translated_texts: list[TranslatedTextedSegment] = attr.field(factory=list)
     processed_video: RemoteFile | None = attr.ib(default=None)

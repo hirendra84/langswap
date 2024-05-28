@@ -1,10 +1,8 @@
-import os.path
-
 from logging import getLogger
 
 from src.api_client import APIClient
 from src.enums import ProcessStatus
-from src.pipeline_models import TextedSegment, TranslatedTextedSegment, VideoTranslation
+from src.pipeline_models import TranslatedTextedSegment, VideoTranslation
 
 from src.translation_service.translator_client import TranslatorClient, DeepLClient
 
@@ -47,6 +45,7 @@ class TranslationManager:
             source_file=video_translation.source_file,
             extracted_audio=video_translation.extracted_audio,
             vad_filtered_audio=video_translation.vad_filtered_audio,
+            background_audio=video_translation.background_audio,
             recognized_texts=segments,
             translated_texts=translated_segments,
             processed_video=video_translation.processed_video,

@@ -59,10 +59,16 @@ class SpeechToTextManager:
                                       progress=10,
                                       status=ProcessStatus.in_progress)
         
-        background_files = DemucsClient().separate(audio_file, self._file_repository)
+        background_paths = DemucsClient().separate(audio_file.file_path, self._file_repository.subdir('background_files'))
+
+        background_files = {name: self._file_repository.save_file(
+            RemoteFile(name=name,
+                       file_path=path),
+            force=True
+        ) for path, name in background_paths}
 
         # transcribe only according to the vocals
-        vocal_file = self._file_repository.get_file("vocals.wav")
+        vocal_file = background_files["vocals.wav"]
         transcription = self._asr_client.transcribe(vocal_file.s3_url)
 
         self._api_client.update_video(self.public_id,

@@ -41,6 +41,7 @@ async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject
         file_repo.get_file('uploaded_video'),
         content
     )
+    print(uploaded_video.s3_url)
 
     obj = models.ProcessedObject(
         source_link=uploaded_video.s3_url,
@@ -71,7 +72,8 @@ async def process_video_by_link(db: Session, data: schemas.CreateProcessedObject
 
     public_id = generate_public_id()
     file_repo = FileRepository(
-        '',
+        public_id,
+        BASE_WORKING_DIR,
         get_s3_client()
     )
 
