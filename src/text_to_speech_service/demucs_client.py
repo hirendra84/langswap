@@ -1,5 +1,6 @@
 import demucs
 import demucs.api
+import torch
 import torchaudio
 import os
 from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
@@ -23,19 +24,21 @@ class DemucsClient:
             background_files.append((generated_file_path, file_name))
         return background_files
 
-    def merge_background(self, generated_audio_path, repo,
-                        modes=['other', 'bass', 'drums'],
-                        target_sr=48000):
+    def merge_background(self, generated_audio_path, audio_backgrounds: dict[str, str],
+                        modes: list | None = None,
+                        target_sr=48000) -> torch.Tensor:
+        if modes is None:
+            modes = ['other.wav', 'bass.wav', 'drums.wav']
         speech_audio, sr = torchaudio.load(generated_audio_path)
 
         audio = speech_audio
         for m in modes:
-            sample_path = repo.get_file(f'{m}.wav')
+            sample_path = audio_backgrounds[m]
 
             # TODO: make it return a tensor
-            AudioDubbingManager.resample_save(sample_path.file_path,
+            AudioDubbingManager.resample_save(sample_path,
                                 target_sr=target_sr)            
-            back_sound, sr = torchaudio.load(sample_path.file_path)
+            back_sound, sr = torchaudio.load(sample_path)
 
             audio += back_sound[0, :speech_audio.shape[1]]
         return audio

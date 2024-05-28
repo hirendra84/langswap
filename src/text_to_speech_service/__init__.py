@@ -101,9 +101,16 @@ class TextToSpeechManager:
         styled_audio = self._file_repository.get_file("styled_full_audio.wav")
         torchaudio.save(styled_audio.file_path, generated_audio, self.sample_rate)
 
+        audio_backgrounds = {
+            name: self._file_repository.materialize_file(remote_file).file_path
+            for name, remote_file in
+            video_translation.background_audio.items()
+        }
+
         resulted_audio = DemucsClient().merge_background(
                     styled_audio.file_path,
-                    self._file_repository)
+                    audio_backgrounds,
+        )
         
         result_audio = self._file_repository.get_file("resulted_audio.wav")
         torchaudio.save(result_audio.file_path, resulted_audio, self.sample_rate)

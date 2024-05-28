@@ -22,18 +22,26 @@ class FileRepository(ABC):
         ...
 
     def materialize_file(self, file: RemoteFile) -> RemoteFile:
+        """ Saves file from file.s3_url to file.file_path """
         ...
 
     def get_file(self, file_name: str) -> RemoteFile:
+        """ Creates empty RemoteFile object with file.file_path = directory / file_name
+         and file.name == file_name and """
         ...
 
     def save_file(self, file: RemoteFile, force: bool = False):
+        """ Uploads file to s3 using _s3_client.
+        :returns: RemoteFile with file.s3_url"""
         ...
 
     def save_file_from_stream(self, file: RemoteFile, stream: io.BytesIO):
+        """ Saves :param: stream to file.file_path """
         ...
 
     def subdir(self, dir_name: str) -> str:
+        """ Creates folder self.directory / dir_name.
+        :returns: new folder path"""
         ...
 
     @property
