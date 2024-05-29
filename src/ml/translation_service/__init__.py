@@ -2,7 +2,7 @@ from logging import getLogger
 
 from src.ml.api_client import APIClient
 from src.pipeline_models.enums import ProcessStatus
-from src.pipeline_models import TranslatedTextedSegment, VideoTranslation
+from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 
 from src.ml.translation_service.translator_client import TranslatorClient, DeepLClient
 

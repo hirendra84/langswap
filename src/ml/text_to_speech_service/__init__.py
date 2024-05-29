@@ -7,7 +7,7 @@ from src.ml.api_client import APIClient
 from src.pipeline_models.enums import ProcessStatus
 from src.ml.ffmpeg import FFmpegClient
 from src.file_repository import FileRepository
-from src.pipeline_models import VideoTranslation
+from src.pipeline_models.models import VideoTranslation
 from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 from src.ml.text_to_speech_service.tts_client import TTSClient, XTTSClient

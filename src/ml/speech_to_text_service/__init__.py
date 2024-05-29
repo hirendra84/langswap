@@ -7,8 +7,9 @@ from logging import getLogger
 from src.ml.api_client import APIClient
 from src.pipeline_models.enums import ProcessStatus
 from src.ml.ffmpeg import FFmpegClient
-from src.file_repository import FileRepository, RemoteFile
-from src.pipeline_models import TextedSegment, VideoTranslation
+from src.file_repository import FileRepository
+from src.pipeline_models.models import RemoteFile
+from src.pipeline_models.models import TextedSegment, VideoTranslation
 from src.ml.speech_to_text_service import asr_client
 from src.ml.speech_to_text_service.asr_client import ASRClient
 from src.ml.speech_to_text_service.vad_client import VadClient

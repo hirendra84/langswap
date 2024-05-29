@@ -2,7 +2,7 @@ from abc import ABC
 
 from tqdm.auto import tqdm
 
-from src.pipeline_models import TranslatedTextedSegment
+from src.pipeline_models.models import TranslatedTextedSegment
 from TTS.api import TTS
 import os
 import torchaudio

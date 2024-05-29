@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from src.api import models, schemas
 from src.pipeline_models.enums import ProcessStatus
 from src.file_repository import FileRepository, file_repo_klass
+from src.pipeline_models.models import VideoTranslation
 from src.settings import DEBUG, BASE_WORKING_DIR
 from src.utils.common import generate_public_id
 from src.ml import tasks as ml_tasks
@@ -15,8 +16,6 @@ from src.utils.s3_client import get_s3_client
 from src.utils.youtube import get_yt_stream_and_name
 
 logger = getLogger()
-
-
 
 
 async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject:
@@ -52,7 +51,12 @@ async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject
         db.commit()
         db.refresh(obj)
 
-    ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, uploaded_video),
+    video_translation = VideoTranslation(
+        source_file=uploaded_video,
+        public_id=obj.public_id,
+    )
+
+    ml_pipeline = chain(ml_tasks.speech_to_text.s(video_translation),
                         ml_tasks.translate.s(),
                         ml_tasks.text_to_speech.s())
     if DEBUG:

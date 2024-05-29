@@ -7,7 +7,7 @@ import torchaudio.transforms as transforms
 
 from pydub import AudioSegment
 from src.file_repository import FileRepository
-from src.pipeline_models import TextedSegment
+from src.pipeline_models.models import TextedSegment
 
 
 class AudioDubbingManager:

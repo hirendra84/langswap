@@ -2,20 +2,14 @@ import io
 from abc import ABC
 
 import boto3
-import attr
 import requests
 import os.path
 
+from src.pipeline_models.models import RemoteFile
 from src.settings import LOCAL_DEBUG
 
+
 BUCKET = 'ds-dev-video-storage'
-
-
-@attr.s(auto_attribs=True)
-class RemoteFile:
-    name: str
-    file_path: str = attr.ib(default='')
-    s3_url: str = attr.ib(default='')
 
 
 class FileRepository(ABC):
@@ -213,7 +207,7 @@ class LocalFileRepository(FileRepository):
         return RemoteFile(
             name=file.name,
             file_path=os.path.join(self._directory, file.name),
-            s3_url=file.s3_url,
+            s3_url=file.s3_url or 'fake_url',
         )
 
     @property

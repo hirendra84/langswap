@@ -25,7 +25,6 @@ class UpdProcessedObject(BaseModel):
     progress: int | None
     translated: list[str] | None
     recognized: list[str] | None
-    public_id: str
 
 
 class CreateUser(BaseModel):

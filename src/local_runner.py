@@ -1,6 +1,7 @@
 from src.ml.api_client import MockAPIClient
-from src.file_repository import LocalFileRepository, RemoteFile
-from src.pipeline_models import VideoTranslation
+from src.file_repository import LocalFileRepository
+from src.pipeline_models.models import RemoteFile
+from src.pipeline_models.models import VideoTranslation
 from src.settings import BASE_WORKING_DIR
 from src.ml.speech_to_text_service import SpeechToTextManager
 from src.ml.text_to_speech_service import TextToSpeechManager

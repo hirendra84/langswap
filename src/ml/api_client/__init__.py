@@ -3,7 +3,7 @@ from time import sleep
 import requests
 
 from src.pipeline_models.enums import ProcessStatus
-from src.pipeline_models import VideoTranslation
+from src.pipeline_models.models import VideoTranslation
 from src.settings import BACKEND_URL
 
 
@@ -19,7 +19,7 @@ class APIClient:
                                  progress: int,
                                  status: ProcessStatus):
         data = {
-            'status': str(status),
+            'status': str(status.value),
             'progress': progress,
         }
         if video_translation.recognized_texts:
@@ -34,16 +34,18 @@ class APIClient:
 
     def update_video(self, public_id, video_translation: VideoTranslation, progress: int, status: ProcessStatus):
         exception = None
-        for i in range(10):
+        for i in range(1):
+            update_message = self._translation_to_api_data(video_translation, progress, status)
             r = requests.put(
                 f'{BACKEND_URL}/video/{public_id}',
-                json=self._translation_to_api_data(video_translation, progress, status)
+                json=update_message
             )
             try:
                 r.raise_for_status()
                 return
             except Exception as e:
                 exception = e
+                print(update_message)
             sleep(5)
         raise exception
 
