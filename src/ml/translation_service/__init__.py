@@ -1,10 +1,10 @@
 from logging import getLogger
 
-from src.api_client import APIClient
-from src.enums import ProcessStatus
+from src.ml.api_client import APIClient
+from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models import TranslatedTextedSegment, VideoTranslation
 
-from src.translation_service.translator_client import TranslatorClient, DeepLClient
+from src.ml.translation_service.translator_client import TranslatorClient, DeepLClient
 
 
 logger = getLogger(__name__)
@@ -42,6 +42,7 @@ class TranslationManager:
             )
 
         new_video_translation = VideoTranslation(
+            public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=video_translation.extracted_audio,
             vad_filtered_audio=video_translation.vad_filtered_audio,

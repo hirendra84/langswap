@@ -1,7 +1,7 @@
-from sqlalchemy import Column, Integer, String, Enum, DateTime, func, ARRAY
-from .database import Base
+from sqlalchemy import Column, Integer, String, Enum, DateTime, func
+from src.api.database import Base
 
-from .enums import ProcessStatus
+from src.pipeline_models.enums import ProcessStatus
 
 
 class ProcessedObject(Base):

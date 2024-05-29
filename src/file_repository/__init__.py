@@ -6,6 +6,8 @@ import attr
 import requests
 import os.path
 
+from src.settings import LOCAL_DEBUG
+
 BUCKET = 'ds-dev-video-storage'
 
 
@@ -224,3 +226,8 @@ class LocalFileRepository(FileRepository):
         os.makedirs(new_dir, exist_ok=True)
         return new_dir
 
+
+if LOCAL_DEBUG:
+    file_repo_klass = LocalFileRepository
+else:
+    file_repo_klass = RemoteFileRepository

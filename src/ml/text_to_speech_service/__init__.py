@@ -3,15 +3,15 @@ import torchaudio
 
 from logging import getLogger
 
-from src.api_client import APIClient
-from src.enums import ProcessStatus
-from src.ffmpeg import FFmpegClient
-from src.file_repository import FileRepository, RemoteFile
+from src.ml.api_client import APIClient
+from src.pipeline_models.enums import ProcessStatus
+from src.ml.ffmpeg import FFmpegClient
+from src.file_repository import FileRepository
 from src.pipeline_models import VideoTranslation
-from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
-from src.text_to_speech_service.demucs_client import DemucsClient
-from src.text_to_speech_service.tts_client import TTSClient, XTTSClient
-from src.speech_to_text_service.vad_client import VadClient
+from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
+from src.ml.text_to_speech_service.demucs_client import DemucsClient
+from src.ml.text_to_speech_service.tts_client import TTSClient, XTTSClient
+from src.ml.speech_to_text_service import VadClient
 from pyrubberband.pyrb import time_stretch
 
 logger = getLogger(__name__)
@@ -127,6 +127,7 @@ class TextToSpeechManager:
         self._file_repository.save_file(resulted_video)
 
         new_video_translation = VideoTranslation(
+            public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=video_translation.extracted_audio,
             vad_filtered_audio=video_translation.vad_filtered_audio,

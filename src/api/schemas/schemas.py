@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, HttpUrl
 
-from src.enums import ProcessStatus
+from src.pipeline_models.enums import ProcessStatus
 
 
 class RespProcessedObject(BaseModel):

@@ -1,10 +1,10 @@
-from src.api_client import MockAPIClient
+from src.ml.api_client import MockAPIClient
 from src.file_repository import LocalFileRepository, RemoteFile
 from src.pipeline_models import VideoTranslation
 from src.settings import BASE_WORKING_DIR
-from src.speech_to_text_service import SpeechToTextManager
-from src.text_to_speech_service import TextToSpeechManager
-from src.translation_service import TranslationManager
+from src.ml.speech_to_text_service import SpeechToTextManager
+from src.ml.text_to_speech_service import TextToSpeechManager
+from src.ml.translation_service import TranslationManager
 from src.utils.s3_client import get_s3_client
 
 api_client_klass = MockAPIClient

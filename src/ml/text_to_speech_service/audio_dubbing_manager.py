@@ -1,18 +1,12 @@
 import os
-from typing import Iterator
 
-import elevenlabs
-import numpy as np
 import torchaudio
 
-from tqdm import tqdm
-
 import pandas as pd
-import torch
 import torchaudio.transforms as transforms
 
 from pydub import AudioSegment
-from src.file_repository import FileRepository, RemoteFile
+from src.file_repository import FileRepository
 from src.pipeline_models import TextedSegment
 
 

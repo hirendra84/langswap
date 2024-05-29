@@ -2,7 +2,7 @@ from time import sleep
 
 import requests
 
-from src.enums import ProcessStatus
+from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models import VideoTranslation
 from src.settings import BACKEND_URL
 
@@ -19,7 +19,7 @@ class APIClient:
                                  progress: int,
                                  status: ProcessStatus):
         data = {
-            'status': status,
+            'status': str(status),
             'progress': progress,
         }
         if video_translation.recognized_texts:

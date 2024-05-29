@@ -1,16 +1,10 @@
 from abc import ABC
-from typing import Iterator
 
-import elevenlabs
-from elevenlabs.client import ElevenLabs
 from tqdm.auto import tqdm
 
-from src.pipeline_models import TextedSegment, TranslatedTextedSegment
+from src.pipeline_models import TranslatedTextedSegment
 from TTS.api import TTS
 import os
-from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
-from src.speech_to_text_service.vad_client import VadClient
-from src.file_repository import FileRepository
 import torchaudio
 
 

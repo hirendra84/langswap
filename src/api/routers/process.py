@@ -4,9 +4,9 @@ from fastapi import Depends, HTTPException, APIRouter, UploadFile, File
 from sqlalchemy.orm import Session
 from starlette import status
 
-from src import schemas, crud
-from src.database import get_db
-from src.models import ProcessedObject
+from src.api import crud, schemas
+from src.api.database import get_db
+from src.api.models import ProcessedObject
 
 router = APIRouter()
 

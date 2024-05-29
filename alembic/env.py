@@ -17,7 +17,8 @@ SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{PO
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
-from src import models
+from src.api import models
+
 config = context.config
 
 # Interpret the config file for Python logging.

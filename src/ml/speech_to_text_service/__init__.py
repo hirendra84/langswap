@@ -4,15 +4,15 @@ import spacy
 
 from logging import getLogger
 
-from src.api_client import APIClient
-from src.enums import ProcessStatus
-from src.ffmpeg import FFmpegClient
+from src.ml.api_client import APIClient
+from src.pipeline_models.enums import ProcessStatus
+from src.ml.ffmpeg import FFmpegClient
 from src.file_repository import FileRepository, RemoteFile
 from src.pipeline_models import TextedSegment, VideoTranslation
-from src.speech_to_text_service import asr_client
-from src.speech_to_text_service.asr_client import ASRClient
-from src.speech_to_text_service.vad_client import VadClient
-from src.text_to_speech_service.demucs_client import DemucsClient
+from src.ml.speech_to_text_service import asr_client
+from src.ml.speech_to_text_service.asr_client import ASRClient
+from src.ml.speech_to_text_service.vad_client import VadClient
+from src.ml.text_to_speech_service.demucs_client import DemucsClient
 
 logger = getLogger(__name__)
 
@@ -79,6 +79,7 @@ class SpeechToTextManager:
         segments = self._remap_sentences(transcription.word_timestamps)
 
         return VideoTranslation(
+            public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=audio_file,
             background_audio=background_files,

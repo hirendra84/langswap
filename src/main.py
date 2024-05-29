@@ -1,8 +1,6 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
-from src.routers import process
-from src.routers import user
+from src.api.routers import process, user
 from src.settings import DEBUG
 
 app = FastAPI(debug=DEBUG)

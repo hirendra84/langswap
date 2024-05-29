@@ -5,21 +5,18 @@ from celery import chain
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from src import models
-from src import schemas
-from src.file_repository import FileRepository, RemoteFileRepository, LocalFileRepository
-from src.settings import DEBUG, LOCAL_DEBUG, BASE_WORKING_DIR
+from src.api import models, schemas
+from src.pipeline_models.enums import ProcessStatus
+from src.file_repository import FileRepository, file_repo_klass
+from src.settings import DEBUG, BASE_WORKING_DIR
 from src.utils.common import generate_public_id
-from src.utils.ml_processing import tasks as ml_tasks
+from src.ml import tasks as ml_tasks
 from src.utils.s3_client import get_s3_client
 from src.utils.youtube import get_yt_stream_and_name
 
 logger = getLogger()
 
-if LOCAL_DEBUG:
-    file_repo_klass = LocalFileRepository
-else:
-    file_repo_klass = RemoteFileRepository
+
 
 
 async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject:
@@ -47,6 +44,7 @@ async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject
         source_link=uploaded_video.s3_url,
         original_name=file.filename,
         public_id=public_id,
+        status=ProcessStatus.uploaded,
     )
 
     if not DEBUG:
@@ -54,12 +52,11 @@ async def process_video(db: Session, file: UploadFile) -> models.ProcessedObject
         db.commit()
         db.refresh(obj)
 
-        ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, uploaded_video),
-                            ml_tasks.speaker_encoder.s(obj.public_id, obj.source_link),
-                            ml_tasks.text_to_speech.s(obj.public_id, obj.source_link))
+    ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, uploaded_video),
+                        ml_tasks.translate.s(),
+                        ml_tasks.text_to_speech.s())
     if DEBUG:
-        ml_tasks.speech_to_text(public_id, uploaded_video, file_repo)
-        # ml_pipeline.apply()
+        ml_pipeline.apply()
     else:
         ml_pipeline()
 

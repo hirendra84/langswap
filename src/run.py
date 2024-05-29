@@ -1,6 +1,6 @@
 import uvicorn
 
-from src.database import Base, engine
+from src.api.database import Base, engine
 from src.main import app
 from src.settings import DEBUG
 

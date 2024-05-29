@@ -3,7 +3,7 @@ import demucs.api
 import torch
 import torchaudio
 import os
-from src.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
+from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 
 
 class DemucsClient:
