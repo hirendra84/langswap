@@ -33,6 +33,7 @@ numpy = "^1.26.4"
 pydub = "^0.25.1"
 tts = "^0.22.0"
 pyrubberband = "^0.3.0"
+cattrs = "^23.2.3"
 
 
 [build-system]
