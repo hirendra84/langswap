@@ -35,7 +35,7 @@ class TextToSpeechManager:
 
         self.audio_dubbing_manager = AudioDubbingManager(self.tts_sample_rate,
                                                          file_repository)
-        self._tts_client = XTTSClient()
+        self._tts_client = XTTSClient(file_repository=file_repository)
     
     def get_audio_length(self, audio_path):
         audio, sr = torchaudio.load(audio_path)
@@ -56,7 +56,7 @@ class TextToSpeechManager:
         df = db_manager.split_audio_seconds(video_translation.recognized_texts,
                                             vocals_audio.file_path,
                                             sample_rate=self.tts_sample_rate)
-        
+                
         df_generated_audio = self._tts_client.generate_audio(
                     video_translation.translated_texts,
                     vocals_audio,
@@ -69,7 +69,7 @@ class TextToSpeechManager:
         )
         video_length = FFmpegClient().get_audio_length(extracted_audio_file.file_path)
 
-        generated_audio = self.merge_timestamps_speedup(
+        generated_audio = self.merge_timestamps_stretch_whole(
             df_styled_audio,
             video_length=video_length,
             source_sample_rate=self.sample_rate
@@ -167,5 +167,11 @@ class TextToSpeechManager:
 
             audio_first = torch.cat((audio_first, audio), dim=1)
             audio_first = torch.cat((audio_first, pause), dim=1)
+
         # add end pause
-        return audio_first
+        prev_audio, sr = torchaudio.load(self._file_repository.get_file("vocals.wav").file_path)
+        prev_audio_shape = prev_audio.shape[1]
+        gen_audio_shape = audio_first.shape[1]
+
+        stretched = time_stretch(audio_first.squeeze().numpy(), sr=self.sample_rate, rate=gen_audio_shape/prev_audio_shape)
+        return stretched
