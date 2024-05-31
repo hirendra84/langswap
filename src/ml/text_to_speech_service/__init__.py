@@ -24,6 +24,7 @@ class TextToSpeechManager:
     _api_client: APIClient
     _file_repository: FileRepository
     sample_rate: int = 24_000
+    sample_rate: int = 24_000
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
@@ -48,50 +49,20 @@ class TextToSpeechManager:
         db_manager = AudioDubbingManager(file_repository=self._file_repository,
                                          tts_sample_rate=self.tts_sample_rate)
         
-        # vocal file 44100 -> 16000 for vad
-        # db_manager.resample_save(vocals_audio.file_path, target_sr=16000)
-
-        # vad_filtered_audio_file = self._file_repository.get_file(f'{vocals_audio.name}_vad')
-        # vad_filtered_audio_file.file_path = VadClient().vad_filter(
-        #     vocals_audio.file_path,
-        #     vad_filtered_audio_file.file_path,
-        #     sample_rate=16000)
-        
-<<<<<<< Updated upstream:src/ml/text_to_speech_service/__init__.py
-        db_manager.resample_save(vad_filtered_audio_file.file_path,
-                                 target_sr=self.tts_sample_rate)
-=======
         AudioDubbingManager.resample_save(vocals_audio.file_path,
                         target_sr=self.tts_sample_rate)
->>>>>>> Stashed changes:src/text_to_speech_service/__init__.py
         
         # split source -> generate tts -> style from tts
         df = db_manager.split_audio_seconds(video_translation.recognized_texts,
                                             vocals_audio.file_path,
                                             sample_rate=self.tts_sample_rate)
-        generated_audio_folder = self._file_repository.subdir("generated_audio")
-        generated_audio_names_paths = self._tts_client.generate_audio(
+        
+        df_generated_audio = self._tts_client.generate_audio(
                     video_translation.translated_texts,
-<<<<<<< Updated upstream:src/ml/text_to_speech_service/__init__.py
-                    generated_audio_folder,
-                    vad_filtered_audio_file.file_path,
-                    lang='en')
-
-        for idx, name_path in enumerate(generated_audio_names_paths):
-            df.loc[idx, "generated_path"] = name_path[1]  # path
-        styled_folder = self._file_repository.subdir('styled_generated_audio')
-        df_styled_audio = self._tts_client.style_audio(
-                    styled_folder,
-                    df)
-        # resample audio to the previous sample rate (!)
-        self.sanity_check(df_styled_audio, self.sample_rate)
-=======
                     vocals_audio,
                     df)
-        
         df_styled_audio = self._tts_client.style_audio(
                     df_generated_audio)
->>>>>>> Stashed changes:src/text_to_speech_service/__init__.py
 
         extracted_audio_file = self._file_repository.materialize_file(
             video_translation.extracted_audio
