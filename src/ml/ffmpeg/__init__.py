@@ -26,16 +26,15 @@ class FFmpegClient:
         cmd = f"-y -i {input_path} -c:v libx264 -crf 23 -preset fast {output_path}.{output_format}"
         return self.run_command(cmd)
 
-    def extract_audio(self, input_path, output_path, time_limit: int | None = None):
+    def extract_audio(self, input_path, output_path, time_limit: int | None = None, target_sr=24000):
         """Extract audio from video."""
 
         limit_command = ''
         if time_limit:
             limit_command = f'-t {time_limit}'
 
-        cmd = f"-y -i {input_path} -vn -acodec pcm_s16le -ar 44100 -ac 1 -f wav {limit_command} {output_path}"
+        cmd = f"-y -i {input_path} -vn -acodec pcm_s16le -ar {target_sr} -ac 1 -f wav {limit_command} {output_path}"
         return self.run_command(cmd)
-
 
     def resample_audio(self, input_path, output_path, sample_rate: int = 16_000):
         cmd = f"-y -i {input_path} -ar {sample_rate} -f wav {output_path}"

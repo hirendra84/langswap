@@ -23,7 +23,7 @@ class TextToSpeechManager:
     _tts_client: TTSClient
     _api_client: APIClient
     _file_repository: FileRepository
-    sample_rate: int = 48_000
+    sample_rate: int = 24_000
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
@@ -40,12 +40,6 @@ class TextToSpeechManager:
         audio, sr = torchaudio.load(audio_path)
         return audio.shape[1] / sr
 
-    def sanity_check(self, df, target_sample_rate):
-        # TODO: delete it. 
-        for row in df.iterrows():
-            AudioDubbingManager.resample_save(row[1].styled_generated_path,
-                        target_sr=target_sample_rate)
-
     def synthesize(self, video_translation: VideoTranslation) -> VideoTranslation:
 
         vocals_audio = video_translation.background_audio["vocals.wav"]
@@ -55,16 +49,21 @@ class TextToSpeechManager:
                                          tts_sample_rate=self.tts_sample_rate)
         
         # vocal file 44100 -> 16000 for vad
-        db_manager.resample_save(vocals_audio.file_path, target_sr=16000)
+        # db_manager.resample_save(vocals_audio.file_path, target_sr=16000)
 
-        vad_filtered_audio_file = self._file_repository.get_file(f'{vocals_audio.name}_vad')
-        vad_filtered_audio_file.file_path = VadClient().vad_filter(
-            vocals_audio.file_path,
-            vad_filtered_audio_file.file_path,
-            sample_rate=16000)
+        # vad_filtered_audio_file = self._file_repository.get_file(f'{vocals_audio.name}_vad')
+        # vad_filtered_audio_file.file_path = VadClient().vad_filter(
+        #     vocals_audio.file_path,
+        #     vad_filtered_audio_file.file_path,
+        #     sample_rate=16000)
         
+<<<<<<< Updated upstream:src/ml/text_to_speech_service/__init__.py
         db_manager.resample_save(vad_filtered_audio_file.file_path,
                                  target_sr=self.tts_sample_rate)
+=======
+        AudioDubbingManager.resample_save(vocals_audio.file_path,
+                        target_sr=self.tts_sample_rate)
+>>>>>>> Stashed changes:src/text_to_speech_service/__init__.py
         
         # split source -> generate tts -> style from tts
         df = db_manager.split_audio_seconds(video_translation.recognized_texts,
@@ -73,6 +72,7 @@ class TextToSpeechManager:
         generated_audio_folder = self._file_repository.subdir("generated_audio")
         generated_audio_names_paths = self._tts_client.generate_audio(
                     video_translation.translated_texts,
+<<<<<<< Updated upstream:src/ml/text_to_speech_service/__init__.py
                     generated_audio_folder,
                     vad_filtered_audio_file.file_path,
                     lang='en')
@@ -85,6 +85,13 @@ class TextToSpeechManager:
                     df)
         # resample audio to the previous sample rate (!)
         self.sanity_check(df_styled_audio, self.sample_rate)
+=======
+                    vocals_audio,
+                    df)
+        
+        df_styled_audio = self._tts_client.style_audio(
+                    df_generated_audio)
+>>>>>>> Stashed changes:src/text_to_speech_service/__init__.py
 
         extracted_audio_file = self._file_repository.materialize_file(
             video_translation.extracted_audio

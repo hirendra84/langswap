@@ -33,8 +33,6 @@ class SpeechToTextManager:
         self._file_repository = file_repository
 
     def _resample_audio(self, audio_file: RemoteFile) -> RemoteFile:
-
-        # resampled_audio_path = os.path.join(self.directory, )
         resampled_audio_file = self._file_repository.get_file(f'{audio_file.name}_resampled_{self.sample_rate}')
         (FFmpegClient()
          .resample_audio(audio_file.file_path,
@@ -77,7 +75,10 @@ class SpeechToTextManager:
                                       progress=30,
                                       status=ProcessStatus.in_progress)
 
-        segments = self._remap_sentences(transcription.word_timestamps)
+        segments = [TextedSegment(text=slc.text,
+            start=slc.start,
+            end=slc.end,
+        ) for slc in transcription.segments]
 
         return VideoTranslation(
             public_id=video_translation.public_id,
@@ -101,57 +102,3 @@ class SpeechToTextManager:
         logger.error(err)
 
         return output_file
-
-    def _remap_sentences(self, transcription: list[asr_client.WordTimestamp]) -> list[TextedSegment]:
-        # TODO: can be removed 
-        def load_spacy_model(language='xx') -> spacy.Language:
-            spacy_languages = {
-                'en': "en_core_web_sm",
-                'ru': "ru_core_news_sm",
-                'fr': "fr_core_news_sm",
-                'zh': "zh_core_web_sm",
-                "de": "de_core_news_sm",
-                "nl": "nl_core_news_sm",
-                "pl": "pl_core_news_sm",
-                "xx": "xx_sent_ud_sm"  # multilingual model
-            }
-            selected_model = spacy_languages[language]
-            try:
-                nlp_ = spacy.load(selected_model)
-            except OSError:
-                spacy.cli.download(selected_model)
-                nlp_ = spacy.load(selected_model)
-            return nlp_
-
-        nlp = load_spacy_model()
-        plain_text = ' '.join(t.word for t in transcription)
-        doc = nlp(plain_text)
-
-        sent_bounds = [s[0].idx for s in doc.sents]
-
-        transcription_dict = [{
-            'word': t.word,
-            'start': t.start,
-            'end': t.end,
-        } for t in transcription]
-        df_words = pd.DataFrame(transcription_dict)
-
-        df_words['text'] = df_words.word
-        df_words['len'] = df_words.text.apply(len)
-        df_words['end_pos'] = (df_words['len'] + 1).cumsum()
-        df_words['start_pos'] = df_words['end_pos'].shift(1, fill_value=0)
-
-        for i, x in enumerate(sent_bounds):
-            df_words.loc[df_words['end_pos'] > x, 'sent'] = i
-
-        df_words.sent = df_words.sent.astype(int)
-        sentences = []
-        for i in df_words.sent.unique():
-            slc = df_words.loc[df_words.sent == i]
-            entry = TextedSegment(
-                text=' '.join(slc.text.to_list()),
-                start=slc.start.min(),
-                end=slc.end.max(),
-            )
-            sentences.append(entry)
-        return sentences
