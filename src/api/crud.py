@@ -72,26 +72,43 @@ async def process_video_by_link(db: Session, data: schemas.CreateProcessedObject
     video_data, video_title = get_yt_stream_and_name(data.link)
 
     public_id = generate_public_id()
-    file_repo = FileRepository(
+
+    file_repo = file_repo_klass(
         public_id,
-        BASE_WORKING_DIR,
-        get_s3_client()
+        base_directory=BASE_WORKING_DIR,
+        s3_client=get_s3_client()
     )
 
-    video_file = file_repo.get_file('uploaded_video')
-
-    video_file = file_repo.save_file_from_stream(video_file, video_data)
+    uploaded_video = file_repo.save_file_from_stream(
+        file_repo.get_file('uploaded_video'),
+        video_data,
+    )
+    print(uploaded_video.s3_url)
 
     obj = models.ProcessedObject(
-        source_link=video_file.s3_url,
+        source_link=uploaded_video.s3_url,
         original_name=video_title,
         public_id=public_id,
+        status=ProcessStatus.uploaded,
     )
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
 
-    await _run_ml_pipeline(obj)
+    if not DEBUG:
+        db.add(obj)
+        db.commit()
+        db.refresh(obj)
+
+    video_translation = VideoTranslation(
+        source_file=uploaded_video,
+        public_id=obj.public_id,
+    )
+
+    ml_pipeline = chain(ml_tasks.speech_to_text.s(video_translation),
+                        ml_tasks.translate.s(),
+                        ml_tasks.text_to_speech.s())
+    if DEBUG:
+        ml_pipeline.apply()
+    else:
+        ml_pipeline()
 
     return obj
 
@@ -124,12 +141,5 @@ async def create_user(db: Session, data: schemas.CreateUser) -> models.User:
     db.refresh(obj)
 
     return obj
-
-
-async def _run_ml_pipeline(obj: models.ProcessedObject):
-    ml_pipeline = chain(ml_tasks.speech_to_text.s(obj.public_id, obj.source_link),
-                        ml_tasks.speaker_encoder.s(obj.public_id, obj.source_link),
-                        ml_tasks.text_to_speech.s(obj.public_id, obj.source_link))
-    return ml_pipeline()
 
 
