@@ -1,10 +1,10 @@
-FROM python:3.11
+FROM python:3.10
 
 ENV PYTHONDONTWRITEBYTECODE 1 \
     PYTHONUNBUFFERED 1
 
 RUN apt-get update \
-    && apt-get install curl python3-dev libpq-dev netcat -y \
+    && apt-get install curl python3-dev libpq-dev netcat-traditional -y \
     && curl -sSL https://install.python-poetry.org | python -
 
 ENV PATH="/root/.local/bin:$PATH"
