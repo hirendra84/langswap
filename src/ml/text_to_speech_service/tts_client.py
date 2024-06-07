@@ -25,6 +25,8 @@ class TTSClient(ABC):
     def style_audio(self, output_directory: str, df):
         ...
 
+    def generate_style_sample(self,  text: str, source_audio_path: str, save_path: str, style=True):
+        ...
 
 class XTTSClient:
     def __init__(self,
@@ -38,43 +40,14 @@ class XTTSClient:
         self._file_repository = file_repository
 
         self.lang = language
-
-    @staticmethod
-    def get_audio_length(audio_path):
-        audio, sr = torchaudio.load(audio_path)
-        return audio.shape[1] / sr
     
-    def generate_audio(self, data: list[TranslatedTextedSegment], source_audio, df) -> list[tuple[str, str]]:
+    def generate_style_sample(self, text: str, source_audio_path: str, save_path: str, style=False):
         """
-        Creates a VAD filtered audio file, generates the audio samples based on this voice.
+        Generates and styles audio, saves according to the path.
+        : param style: whether voice conversion should be applied
         """
-        # dum a file - with resample if needed, caution - long file
-        # TODO: rewrite to one file pipeline
+        # text = text.replace('"', "")
+        self.tts.tts_to_file(text=text, file_path=save_path, speaker_wav=source_audio_path, language=self.lang)
 
-        temp_folder = os.path.join(self._file_repository._directory, "generated_audio")
-        
-        os.makedirs(temp_folder, exist_ok=True)
-
-        for idx, segment in enumerate(data):
-            save_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")
-            self.tts.tts_to_file(text=segment.translation, file_path=save_path, speaker_wav=source_audio.file_path, language=self.lang)
-
-            df.loc[idx, "generated_path"] = save_path
-        return df
-    
-    def style_audio(self, df):
-        """
-        : audio_vad_path: audio path cleaned from the background noise (can be VAD filtered speech)
-        """
-
-        temp_folder = os.path.join(self._file_repository._directory, "styled_generated_audio")
-        os.makedirs(temp_folder, exist_ok=True)
-
-        for row in tqdm(df.iterrows()):
-            idx = row[0]
-            
-            save_path = os.path.join(temp_folder, f"{row[1].start}_{row[1].end}.wav")
-            df.loc[idx, 'styled_generated_path'] = save_path
-
-            self.style_tts.voice_conversion_to_file(source_wav=row[1].generated_path, target_wav=row[1].source_path, file_path=save_path)
-        return df
+        if style:
+            self.style_tts.voice_conversion_to_file(source_wav=save_path, target_wav=source_audio_path, file_path=save_path)
