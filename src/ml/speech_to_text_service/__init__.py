@@ -143,15 +143,43 @@ class SpeechToTextManager:
         for i, x in enumerate(sent_bounds):
             df_words.loc[df_words['end_pos'] > x, 'sent'] = i
 
-        df_words.sent = df_words.sent.astype(int)
-        sentences = []
+        df_words.sent = df_words.sent.astype(int)        
+        entries = []
         for i in df_words.sent.unique():
             slc = df_words.loc[df_words.sent == i]
-            entry = TextedSegment(
-                text=' '.join(slc.text.to_list()),
-                start=slc.start.min(),
-                end=slc.end.max(),
-            )
-            sentences.append(entry)
-        return sentences
+
+            entries.append({"text": ' '.join(slc.text.to_list()), "start": slc.start.min(), "end": slc.end.max()})   
+
+        # algorithm to merge sentences according to the threshold
+        pairs = []
+        threshold = 0.8 
+        prev_end = entries[0]['end']
+        start_idx = entries[0]['start']
+        cur_pair = [entries[0]]
+
+        for cur_sample in entries[1:]:
+            if cur_sample['start'] - prev_end >= threshold and prev_end - start_idx >= 5:
+                pairs.append(
+                    TextedSegment(
+                    text=" ".join([s['text'] for s in cur_pair]),
+                    start=start_idx,
+                    end=prev_end,
+                    )
+                )                   
+                cur_pair = [cur_sample]
+                prev_end = cur_sample['end']
+                start_idx = cur_sample['start']
+            else:
+                cur_pair.append(cur_sample)       
+                prev_end = cur_sample['end']
+
+        if cur_pair:
+            pairs.append(
+                    TextedSegment(
+                    text=" ".join([s['text'] for s in cur_pair]),
+                    start=start_idx,
+                    end=prev_end,
+                    )
+                )   
+        return pairs
 

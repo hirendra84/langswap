@@ -21,12 +21,15 @@ class TranslatedTextedSegment:
     start: float
     end: float
     translation: str
+    source_file: str
+    generated_file: str
 
 
 @attr.s(auto_attribs=True)
 class VideoTranslation:
     public_id: str
     source_file: RemoteFile | None = attr.ib(default=None)
+    speaker_voice_file: RemoteFile | None = attr.ib(default=None)
     extracted_audio: RemoteFile | None = attr.ib(default=None)
     vad_filtered_audio: RemoteFile | None = attr.ib(default=None)
     background_audio: dict[str, RemoteFile] = attr.field(factory=dict)

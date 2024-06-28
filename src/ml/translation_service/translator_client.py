@@ -1,5 +1,8 @@
 from abc import ABC
 import deepl
+import torch
+from tqdm import tqdm
+from seamless_communication.inference import Translator
 
 
 class TranslatorClient(ABC):
@@ -32,3 +35,35 @@ class DeepLClient(TranslatorClient):
             translated_sentences = [translated_sentences]
 
         return [r.text for r in translated_sentences]
+
+class SeamlessClient(TranslatorClient):
+    def __init__(self, key: str):
+        super().__init__(key)
+        model_name = "seamlessM4T_v2_large"
+        vocoder_name = "vocoder_v2"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.translator = Translator(
+            model_name,
+            vocoder_name,
+            device=device,
+            dtype=torch.float16,
+        )
+    
+    def translate(self, sentences: list[str], source_lang: str, target_lang: str) -> list[str]:
+        translations = []
+        for sent in tqdm(sentences):
+            translated_sent = ""
+            # TODO: make it smarter
+            for s in sent.split(". "):
+                translated_s, _ = self.translator.predict(
+                    input=sent,
+                    task_str="t2st",
+                    tgt_lang=target_lang,
+                    src_lang=source_lang,
+                )
+
+                translated_sent += str(translated_s[0])
+
+            translations.append(translated_sent)
+        return translations

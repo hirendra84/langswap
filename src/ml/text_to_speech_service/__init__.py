@@ -10,11 +10,12 @@ from src.file_repository import FileRepository
 from src.pipeline_models.models import VideoTranslation
 from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
-from src.ml.text_to_speech_service.tts_client import TTSClient, XTTSClient
+from src.ml.text_to_speech_service.tts_client import TTSClient, XTTSClient, VoiceToneConverter
 from src.ml.speech_to_text_service import VadClient
 from pyrubberband.pyrb import time_stretch
 import os
 import pandas as pd
+from tqdm import tqdm
 
 logger = getLogger(__name__)
 
@@ -22,11 +23,10 @@ logger = getLogger(__name__)
 class TextToSpeechManager:
     public_id: str
 
-    _tts_client: TTSClient
+    _tts_client: XTTSClient
     _api_client: APIClient
     _file_repository: FileRepository
-    sample_rate: int = 24_000
-    sample_rate: int = 24_000
+    sample_rate: int = 22050
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
@@ -38,6 +38,8 @@ class TextToSpeechManager:
         self.audio_dubbing_manager = AudioDubbingManager(self.tts_sample_rate,
                                                          file_repository)
         self._tts_client = XTTSClient(file_repository=file_repository)
+        # hardcoded
+        self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder="/home/milana/OpenVoice/OpenVoiceV2/converter")
 
     def synthesize(self, video_translation: VideoTranslation) -> VideoTranslation:
 
@@ -57,13 +59,21 @@ class TextToSpeechManager:
                                             splitted_audio_folder,
                                             sample_rate=self.tts_sample_rate,
                                             )
-        db_manager.enhance_audio(splitted_audio_folder, splitted_audio_folder)
+        
+        enhanced_audio_folder = self._file_repository.subdir("enhanced_audio")
+        video_translation = db_manager.enhance_pipeline(video_translation, enhanced_audio_folder)
         
         generated_audio_folder = self._file_repository.subdir("generated_audio")
-        video_translation = self.generate_audios(
+        video_translation = self._tts_client.tts_pipeline(
                     video_translation,
                     generated_audio_folder)
-
+        
+        styled_audio_folder = self._file_repository.subdir("styled_audio")
+        video_translation = self._speaker_conv_client.voice_conversion_pipeline(
+            video_translation,
+            styled_audio_folder
+        )
+        
         generated_audio = self.merge_timestamps_stretch_whole(
             video_translation,
             vocals_audio
@@ -91,7 +101,7 @@ class TextToSpeechManager:
         source_video = self._file_repository.materialize_file(
             video_translation.source_file
         )
-        resulted_video = self._file_repository.get_file('resulted_video.mp4')
+        resulted_video = self._file_repository.get_file("resulted_video.mp4")
 
         # TODO: it will not work without not saved properly resulted video
         FFmpegClient().replace_audio(source_video.file_path,
@@ -145,17 +155,6 @@ class TextToSpeechManager:
             
             full_audio_blank[0, int(start_pos): int(end_pos)] = audio[0]
         return full_audio_blank
-    
-    def generate_audios(self, video_translation, temp_folder):
-        for idx, segment in enumerate(video_translation.translated_texts):
-            file_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")
-            self._tts_client.generate_style_sample(
-                                segment.translation,
-                                segment.source_file,
-                                file_path
-                                )
-            video_translation.translated_texts[idx].generated_file = file_path
-        return video_translation
 
     def merge_timestamps_stretch_whole(self, video_translation, vocals_audio):
         prev_audio, sr = torchaudio.load(vocals_audio.file_path)
@@ -163,29 +162,31 @@ class TextToSpeechManager:
         target_audio_length = prev_audio_shape / sr
 
         df = pd.DataFrame()
-        df['start'] = [segment.start for segment in video_translation.translated_texts] 
-        df['end'] = [segment.end for segment in video_translation.translated_texts] 
-        df['pause'] = df['start'].shift(-1) - df['end'] # пауза между двумя предложениями 
-        df.loc[df.shape[0] - 1, "pause"] = target_audio_length - df.loc[df.shape[0] - 1, "end"] # the last pause
-
+        df["start"] = [segment.start for segment in video_translation.translated_texts] 
+        df["end"] = [segment.end for segment in video_translation.translated_texts] 
+        df["pause"] = df["start"].shift(-1) - df["end"] # пауза между двумя предложениями 
+        if df.shape[0] > 1:
+            df.loc[df.shape[0] - 1, "pause"] = target_audio_length - df.loc[df.shape[0] - 1, "end"] # the last pause
+        elif df.shape[0] == 1:
+            df.loc[0, "pause"] = 0
 
         previous_pause = torch.zeros((1, int(video_translation.translated_texts[0].start * self.sample_rate)))
         audio_first, sr = torchaudio.load(video_translation.translated_texts[0].generated_file)
-        pause = torch.zeros((1, int(df.iloc[0].pause * self.sample_rate)))
+        pause = torch.zeros((1, int(df.iloc[0].pause * sr)))
 
-        audio_first = torch.cat((previous_pause, audio_first, pause), dim=1)
+        audio_generated = torch.cat((previous_pause, audio_first, pause), dim=1)
 
         for idx, segment in enumerate(video_translation.translated_texts):
             if idx == 0:
                 continue
             audio, sr = torchaudio.load(segment.generated_file)
-            pause = torch.zeros((1, int(df.loc[idx, 'pause'] * self.sample_rate)))
+            pause = torch.zeros((1, int(df.loc[idx, "pause"] * self.sample_rate)))
 
-            audio_first = torch.cat((audio_first, audio), dim=1)
-            audio_first = torch.cat((audio_first, pause), dim=1)
+            audio_generated = torch.cat((audio_generated, audio), dim=1)
+            audio_generated = torch.cat((audio_generated, pause), dim=1)
 
-        gen_audio_shape = audio_first.shape[1]
+        generated_audio_length = audio_generated.shape[1] / sr
 
-        stretched = time_stretch(audio_first.squeeze().numpy(), sr=self.sample_rate, rate=gen_audio_shape/prev_audio_shape)
+        stretched = time_stretch(audio_generated.squeeze().numpy(), sr=sr, rate=generated_audio_length/target_audio_length)
         stretched = torch.tensor(stretched).unsqueeze(0)
         return stretched

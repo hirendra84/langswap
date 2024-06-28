@@ -1,10 +1,10 @@
 from logging import getLogger
-
+import pandas as pd
 from src.ml.api_client import APIClient
 from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 
-from src.ml.translation_service.translator_client import TranslatorClient, DeepLClient
+from src.ml.translation_service.translator_client import TranslatorClient, DeepLClient, SeamlessClient
 
 
 logger = getLogger(__name__)
@@ -19,7 +19,8 @@ class TranslationManager:
     def __init__(self, public_id: str, api_client: APIClient):
         self.public_id = public_id
         self._api_client = api_client
-        self._translator_client = DeepLClient('b95266dc-1675-4c76-86f4-c36dd6ab9a76:fx')
+        # self._translator_client = DeepLClient('b95266dc-1675-4c76-86f4-c36dd6ab9a76:fx')
+        self._translator_client = SeamlessClient(key=None)
 
     def translate(self, video_translation: VideoTranslation) -> VideoTranslation:
 
@@ -27,9 +28,11 @@ class TranslationManager:
 
         sentences_texts = [s.text for s in segments]
 
+        # TODO: specify the languages
         translations = self._translator_client.translate(sentences_texts,
-                                                         source_lang='ru',
-                                                         target_lang='en')
+                                                         source_lang='rus',
+                                                         target_lang='eng')
+
         translated_segments = []
         for s, t in zip(segments, translations):
             translated_segments.append(
@@ -38,6 +41,8 @@ class TranslationManager:
                     start=s.start,
                     end=s.end,
                     translation=t,
+                    source_file=None,
+                    generated_file=None
                 )
             )
 

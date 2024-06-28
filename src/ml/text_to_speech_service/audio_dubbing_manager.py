@@ -6,6 +6,8 @@ import torchaudio.transforms as transforms
 
 from pydub import AudioSegment
 from src.file_repository import FileRepository
+from tqdm import tqdm
+from resemble_enhance.enhancer.inference import denoise, enhance
 
 
 class AudioDubbingManager:
@@ -29,21 +31,21 @@ class AudioDubbingManager:
             torchaudio.save(audio_path, resampled_audio, sample_rate=target_sr)
         return audio_path
     
-    def enhance_audio(self, input_dir, output_dir):
-        try:
-            command = [
-                'resemble-enhance',
-                input_dir,
-                output_dir
-            ]
+    def enhance_audio(self, audio_path, save_path, solver="midpoint",
+                    nfe=64, tau=0.5, device="cpu"):
+        solver = solver.lower()
+        nfe = int(nfe)
+        lambd = 0.9
 
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
-            print(result.stdout)
-            
-        except subprocess.CalledProcessError as e:
-            print(f"Error during the enhancement process: {e}")
-            print(f"Output: {e.output}")
-            print(f"Error: {e.stderr}")
+        dwav, sr = torchaudio.load(audio_path)
+        dwav = dwav.mean(dim=0)
+
+        wav1, new_sr = denoise(dwav, sr, device)
+        wav2, new_sr = enhance(dwav, sr, device, nfe=nfe, solver=solver, lambd=lambd, tau=tau)
+
+        wav2 = wav2.cpu().unsqueeze(0)
+        
+        torchaudio.save(save_path, wav2, new_sr)
 
     
     def split_audio_seconds(self, video_translation, audio_path, temp_folder, sample_rate=24000):
@@ -64,4 +66,16 @@ class AudioDubbingManager:
 
             sound.export(file_path, format="wav")
             video_translation.translated_texts[idx].source_file = file_path
+        return video_translation
+    
+    def enhance_pipeline(self, video_translation, temp_folder):
+        for idx, segment in enumerate(tqdm(video_translation.translated_texts)):
+            audio_path = segment.source_file
+
+            folder_path, audio_name = os.path.split(audio_path)
+            audio_save_path = os.path.join(temp_folder, audio_name)
+
+            # self.enhance_audio(audio_path, audio_save_path)
+
+            video_translation.translated_texts[idx].source_file = audio_save_path
         return video_translation
