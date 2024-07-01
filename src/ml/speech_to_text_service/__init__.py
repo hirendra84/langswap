@@ -46,7 +46,7 @@ class SpeechToTextManager:
             self.sample_rate)
         return vad_filtered_audio_file
 
-    def extract_and_transcribe(self, video_translation: VideoTranslation) -> VideoTranslation:
+    def extract_and_transcribe(self, video_translation: VideoTranslation, lang: str) -> VideoTranslation:
 
         video_name = self._file_repository.materialize_file(video_translation.source_file)
 
@@ -68,14 +68,14 @@ class SpeechToTextManager:
 
         # transcribe only according to the vocals
         vocal_file = background_files["vocals.wav"]
-        transcription = self._asr_client.transcribe(vocal_file.s3_url)
+        transcription = self._asr_client.transcribe(vocal_file.s3_url, lang=lang)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,
                                       progress=30,
                                       status=ProcessStatus.in_progress)
 
-        segments = self._remap_sentences(transcription.word_timestamps)
+        segments = self._remap_sentences(transcription.word_timestamps, lang=lang)
 
         return VideoTranslation(
             public_id=video_translation.public_id,
@@ -100,8 +100,7 @@ class SpeechToTextManager:
 
         return output_file
 
-    def _remap_sentences(self, transcription: list[asr_client.WordTimestamp]) -> list[TextedSegment]:
-        # TODO: can be removed 
+    def _remap_sentences(self, transcription: list[asr_client.WordTimestamp], lang: str) -> list[TextedSegment]:
         def load_spacy_model(language='xx') -> spacy.Language:
             spacy_languages = {
                 'en': "en_core_web_sm",
@@ -111,6 +110,7 @@ class SpeechToTextManager:
                 "de": "de_core_news_sm",
                 "nl": "nl_core_news_sm",
                 "pl": "pl_core_news_sm",
+                "es": "es_core_news_sm",
                 "xx": "xx_sent_ud_sm"  # multilingual model
             }
             selected_model = spacy_languages[language]

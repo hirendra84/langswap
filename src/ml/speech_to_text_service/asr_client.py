@@ -3,7 +3,7 @@ from time import sleep
 import cattrs
 import requests
 
-
+import json
 import attr
 
 
@@ -56,7 +56,7 @@ class ASRClient:
     def __init__(self, api_key: str):
         self.token = api_key
 
-    def transcribe(self, source_url: str) -> Output:
+    def transcribe(self, source_url: str, lang: str) -> Output:
         headers = {
             "accept": "application/json",
             "content-type": "application/json",
@@ -71,7 +71,7 @@ class ASRClient:
                 "model": "large-v2",
                 "transcription": "plain_text",
                 "translate": False,
-                "language": "ru",
+                "language": lang,
                 "temperature": 0,
                 "best_of": 5,
                 "beam_size": 5,
@@ -88,9 +88,10 @@ class ASRClient:
         }
 
         response = requests.post(url, json=payload, headers=headers)
-
-        # STEP 4: Print the response
         response = response.json()
+
+        with open("random_transcribed_text.json", "w", encoding="utf-8") as f:
+            json.dump(response, f, ensure_ascii=False, indent=4)
 
         try:
             return cattrs.structure(response, TranscriptionData).output
