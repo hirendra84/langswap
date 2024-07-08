@@ -1,24 +1,53 @@
-FROM python:3.10
+# Build stage
+FROM python:3.11-slim AS builder
 
-ENV PYTHONDONTWRITEBYTECODE 1 \
-    PYTHONUNBUFFERED 1
-
-RUN apt-get update \
-    && apt-get install curl python3-dev libpq-dev netcat-traditional -y \
-    && curl -sSL https://install.python-poetry.org | python -
-
-ENV PATH="/root/.local/bin:$PATH"
+RUN pip install --upgrade pip
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    python3-dev \
+    libpq-dev \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY freeze.txt .
+RUN pip install --no-deps --no-cache-dir -r freeze.txt
 
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-dev --no-interaction --no-ansi
+# Runtime stage
+FROM python:3.11-slim
 
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    netcat-traditional \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 COPY src ./src
-COPY alembic ./alembic
-COPY alembic.ini entrypoint.sh .
 
-# run entrypoint.sh
-ENTRYPOINT ["/app/entrypoint.sh"]
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    python3-dev \
+    libpq-dev \
+    build-essential \
+    git \
+    ffmpeg \
+    libsndfile1 \
+    libasound2-dev \
+    libportaudio2 \
+    libportaudiocpp0 \
+    portaudio19-dev \
+    libtbbmalloc2 \
+    libtbb-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONPATH="/app/:${PYTHONPATH}"
+
+CMD ["python", "src/local_runner.py"]
