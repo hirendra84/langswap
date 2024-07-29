@@ -25,20 +25,27 @@ class DemucsClient:
         return background_files
 
     def merge_background(self, generated_audio_path, audio_backgrounds: dict[str, str],
-                        modes: list | None = None,
-                        target_sr=48000) -> torch.Tensor:
+                        modes: list | None = None) -> torch.Tensor:
         if modes is None:
             modes = ['other.wav', 'bass.wav', 'drums.wav']
-        speech_audio, sr = torchaudio.load(generated_audio_path)
+            
+        speech_audio, speech_sr = torchaudio.load(generated_audio_path)
 
         audio = speech_audio
         for m in modes:
             sample_path = audio_backgrounds[m]
 
-            # TODO: make it return a tensor
             AudioDubbingManager.resample_save(sample_path,
-                                target_sr=target_sr)            
+                                target_sr=speech_sr)
+                       
             back_sound, sr = torchaudio.load(sample_path)
 
-            audio += back_sound[0, :speech_audio.shape[1]]
-        return audio
+            if back_sound.shape[1] > audio.shape[1]:
+                back_sound = back_sound[0, :speech_audio.shape[1]]
+            elif back_sound.shape[1] < audio.shape[1]:
+                pause = torch.zeros((1, audio.shape[1] - back_sound.shape[1]))
+                back_sound = torch.cat([back_sound, pause], dim=1)
+
+            assert sr == speech_sr, "The sr of generated audio is not equal to background sr"
+            audio += back_sound
+        return audio, speech_sr

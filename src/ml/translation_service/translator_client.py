@@ -57,7 +57,7 @@ class SeamlessClient(TranslatorClient):
             # TODO: make it smarter
             for s in sent.split(". "):
                 translated_s, _ = self.translator.predict(
-                    input=sent,
+                    input=s + '.',
                     task_str="t2st",
                     tgt_lang=target_lang,
                     src_lang=source_lang,
