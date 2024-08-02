@@ -46,6 +46,9 @@ class DemucsClient:
                 pause = torch.zeros((1, audio.shape[1] - back_sound.shape[1]))
                 back_sound = torch.cat([back_sound, pause], dim=1)
 
+            # two channels from demucs
+            if back_sound.shape[0] > 1:
+                back_sound = torch.mean(back_sound, 0).unsqueeze(0)
             assert sr == speech_sr, "The sr of generated audio is not equal to background sr"
             audio += back_sound
         return audio, speech_sr
