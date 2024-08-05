@@ -4,6 +4,7 @@ from abc import ABC
 import boto3
 import requests
 import os.path
+import urllib.request
 
 from src.pipeline_models.models import RemoteFile
 from src.settings import LOCAL_DEBUG
@@ -64,10 +65,12 @@ class RemoteFileRepository(FileRepository):
             return self._cached_files[file.name]
 
         file_path = os.path.join(self._directory, file.name)
-        with requests.get(file.s3_url, stream=True) as response:
+        with urllib.request.urlopen(file.s3_url, stream=True) as response:
             response.raise_for_status()
             with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=self._download_chunk_size):
+                for chunk in response.read_chunked(chunk_size=self._download_chunk_size):
+                    if not chunk:
+                        break
                     f.write(chunk)
         remote_file = RemoteFile(
             name=file.name,
@@ -153,12 +156,32 @@ class LocalFileRepository(FileRepository):
             return self._cached_files[file.name]
 
         file_path = os.path.join(self._directory, file.name)
+        print(file_path)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'} 
         if not os.path.exists(file_path):
-            with requests.get(file.s3_url, stream=True) as response:
-                response.raise_for_status()
-                with open(file_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=self._download_chunk_size):
-                        f.write(chunk)
+            last_error = None
+            for i in range(5):
+                try:
+                    with urllib.request.urlopen(file.s3_url) as response:
+                        status_code = response.getcode()
+                        # Print the status code
+                        print('Status Code:', status_code) 
+                        with open(file_path, 'wb') as f:
+                            while True:
+                                chunk = response.read(1024)
+                                if chunk:
+                                    f.write(chunk)
+                                else:
+                                    break
+                    break
+                except Exception as e:
+                    print(e)
+                    last_error = e
+                    import time
+                    time.sleep(5)
+
+            if last_error is not None:
+                raise last_error
         remote_file = RemoteFile(
             name=file.name,
             file_path=file_path,

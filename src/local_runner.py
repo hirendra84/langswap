@@ -15,7 +15,7 @@ api_client = api_client_klass('dontcare')
 
 def main():
 
-    public_id = 'some_random_public_id'
+    public_id = 'videos'
 
     file_repository = LocalFileRepository(
             public_id,
@@ -24,18 +24,24 @@ def main():
         )
 
     file = RemoteFile(
-        name='some_name',
-        s3_url='https://ds-dev-video-storage.s3.amazonaws.com//Users/nikolaypakhtusov/data/10d64ca2-19ca-11ef-b490-9a1744b66515/extracted_audio_resampled_16000_vad.wav?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=***REDACTED-AWS-KEY-ID***%2F20240524%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20240524T123525Z&X-Amz-Expires=172800&X-Amz-SignedHeaders=host&X-Amz-Signature=5a3e384aea983f83d5d2364df4ba87be8aa540438ecd1c7f5f6dbf2f4ad1e374',
+        name='IMG_7827.MP4',
+        file_path="/app/data/videos/IMG_7827.MP4"
+        # s3_url='https://ds-dev-video-storage.s3.amazonaws.com//Users/nikolaypakhtusov/data/10d64ca2-19ca-11ef-b490-9a1744b66515/extracted_audio_resampled_16000_vad.wav?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=***REDACTED-AWS-KEY-ID***%2F20240524%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20240524T123525Z&X-Amz-Expires=172800&X-Amz-SignedHeaders=host&X-Amz-Signature=5a3e384aea983f83d5d2364df4ba87be8aa540438ecd1c7f5f6dbf2f4ad1e374',
     )
 
+    
+
     manager = SpeechToTextManager(public_id, api_client, file_repository)
-    video_translation = manager.extract_and_transcribe(VideoTranslation(source_file=file))
+    video_translation = manager.extract_and_transcribe(
+        VideoTranslation(public_id = public_id,
+                        source_file=file), lang='en')
     manager = TranslationManager(public_id, api_client)
     video_translation = manager.translate(video_translation)
-    manager = TextToSpeechManager(public_id, api_client, file_repository)
-    video_translation = manager.synthesize(video_translation)
+    manager = TextToSpeechManager(public_id, api_client, file_repository, tts_sample_rate=5500)
+    video_translation = manager.synthesize(video_translation, source_lang='ru', merge_pipeline="stretch_whole")
     print(video_translation)
 
 
 if __name__ == '__main__':
     main()
+

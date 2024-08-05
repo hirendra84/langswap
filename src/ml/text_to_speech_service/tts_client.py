@@ -48,8 +48,8 @@ class VoiceToneConverter:
                 ckpt_converter_folder: str,
                 device="cpu"):
         self.ckpt_converter_folder = ckpt_converter_folder
-        self.tone_color_converter = ToneColorConverter(f'{ckpt_converter_folder}/converter/config.json', device=device)
-        self.tone_color_converter.load_ckpt(f'{ckpt_converter_folder}/converter/checkpoint.pth')
+        self.tone_color_converter = ToneColorConverter(f'{ckpt_converter_folder}/config.json', device=device)
+        self.tone_color_converter.load_ckpt(f'{ckpt_converter_folder}/checkpoint.pth')
 
     def create_speaker(self, audio_path: str):
         se, _ = se_extractor.get_se(audio_path, self.tone_color_converter, vad=True)

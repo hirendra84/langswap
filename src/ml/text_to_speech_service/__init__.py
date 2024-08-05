@@ -13,6 +13,7 @@ from src.ml.text_to_speech_service.demucs_client import DemucsClient
 from src.ml.text_to_speech_service.tts_client import TTSClient, XTTSClient, VoiceToneConverter
 from src.ml.speech_to_text_service import VadClient
 from pyrubberband.pyrb import time_stretch
+from src.settings import OPENVOICE_CONF_DIR
 import os
 import pandas as pd
 from tqdm import tqdm
@@ -37,17 +38,17 @@ class TextToSpeechManager:
 
         self.tts_sample_rate = tts_sample_rate
 
-        self.audio_dubbing_manager = AudioDubbingManager(file_repository)
-        self._tts_client = XTTSClient(file_repository=file_repository, device=device)
-        self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder="/home/milana/OpenVoice/OpenVoiceV2/",
-                                                    device=device)
+        self.audio_dubbing_manager = AudioDubbingManager(tts_sample_rate, file_repository)
+        self._tts_client = XTTSClient(file_repository=file_repository, device='cpu')
+        self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder=OPENVOICE_CONF_DIR,
+                                                    device='cpu')
 
     def synthesize(self, video_translation: VideoTranslation, source_lang: str, voice_conv=False, enhance=False, merge_pipeline="pause_based") -> VideoTranslation:
 
         vocals_audio = video_translation.background_audio["vocals.wav"]
         # self._file_repository.materialize_file(vocals_audio)
 
-        db_manager = AudioDubbingManager(file_repository=self._file_repository)
+        db_manager = AudioDubbingManager(file_repository=self._file_repository, tts_sample_rate=5500)
         
         AudioDubbingManager.resample_save(vocals_audio.file_path, self.tts_sample_rate)
         
