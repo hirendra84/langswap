@@ -11,11 +11,9 @@ from resemble_enhance.enhancer.inference import denoise, enhance
 
 
 class AudioDubbingManager:
-    tts_sample_rate: int
     _file_repository: FileRepository
 
-    def __init__(self, tts_sample_rate: int, file_repository: FileRepository):
-        self.tts_sample_rate = tts_sample_rate
+    def __init__(self, file_repository: FileRepository):
         self._file_repository = file_repository
     
     @classmethod
@@ -24,11 +22,14 @@ class AudioDubbingManager:
         Function resamples audio and rewrites the file.
         """
         waveform, sr = torchaudio.load(audio_path)
+        if waveform.shape[0] == 2:
+            waveform = waveform.mean(dim=0).unsqueeze(0)
+
         if sr != target_sr:
             transform = transforms.Resample(sr, target_sr)
             resampled_audio = transform(waveform)
 
-            torchaudio.save(audio_path, resampled_audio, sample_rate=target_sr)
+        torchaudio.save(audio_path, resampled_audio, sample_rate=target_sr)
         return audio_path
     
     def enhance_audio(self, audio_path, save_path, solver="midpoint",
