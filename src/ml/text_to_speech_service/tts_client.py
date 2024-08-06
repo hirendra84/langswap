@@ -15,7 +15,7 @@ from openvoice.api import ToneColorConverter
 
 from pydub import AudioSegment
 
-
+#TODO: move somewhere
 def add_pauses(audio_path: str):
     audio, sr = torchaudio.load(audio_path)
 
@@ -112,6 +112,7 @@ class XTTSClient:
             file_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")            
 
             if not os.path.exists(file_path):
+                add_pauses(segment.source_file)
                 self.generate_audio(
                                     segment.translation,
                                     segment.source_file,
