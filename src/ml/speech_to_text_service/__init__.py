@@ -152,13 +152,14 @@ class SpeechToTextManager:
 
         # algorithm to merge sentences according to the threshold
         pairs = []
-        threshold = 0.8 
+        threshold = 0.5
         prev_end = entries[0]['end']
         start_idx = entries[0]['start']
         cur_pair = [entries[0]]
 
         for cur_sample in entries[1:]:
-            if cur_sample['start'] - prev_end >= threshold and prev_end - start_idx >= 5:
+            # если пауза достаточно длинная и при этом мы собрали уже около 5 секунд
+            if ((cur_sample['start'] - prev_end) >= threshold and (prev_end - start_idx >= 5)) or (prev_end - start_idx >= 30): 
                 pairs.append(
                     TextedSegment(
                     text=" ".join([s['text'] for s in cur_pair]),
