@@ -4,6 +4,7 @@ import torch
 from tqdm import tqdm
 from seamless_communication.inference import Translator
 
+from src.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 class TranslatorClient(ABC):
 
@@ -51,19 +52,20 @@ class SeamlessClient(TranslatorClient):
         )
     
     def translate(self, sentences: list[str], source_lang: str, target_lang: str) -> list[str]:
+        source_lang = map_language_to_code(source_lang, "seamless")
+        target_lang = map_language_to_code(target_lang, "seamless")
+        
         translations = []
         for sent in tqdm(sentences):
             translated_sent = ""
-            # TODO: make it smarter
-            for s in sent.split(". "):
-                translated_s, _ = self.translator.predict(
-                    input=s + '.',
+            translated_s, _ = self.translator.predict(
+                    input=sent,
                     task_str="t2st",
                     tgt_lang=target_lang,
                     src_lang=source_lang,
                 )
 
-                translated_sent += str(translated_s[0])
+            translated_sent = str(translated_s[0])
 
             translations.append(translated_sent)
         return translations

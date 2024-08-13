@@ -6,6 +6,8 @@ import requests
 import json
 import attr
 
+from src.utils.ml_processing.lang2code_mapper import map_language_to_code
+
 
 @attr.s(auto_attribs=True)
 class WordTimestamp:
@@ -57,6 +59,8 @@ class ASRClient:
         self.token = api_key
 
     def transcribe(self, source_url: str, lang: str) -> Output:
+        lang = map_language_to_code(lang, "whisper")
+
         headers = {
             "accept": "application/json",
             "content-type": "application/json",
@@ -89,9 +93,6 @@ class ASRClient:
 
         response = requests.post(url, json=payload, headers=headers)
         response = response.json()
-
-        with open("random_transcribed_text.json", "w", encoding="utf-8") as f:
-            json.dump(response, f, ensure_ascii=False, indent=4)
 
         try:
             return cattrs.structure(response, TranscriptionData).output

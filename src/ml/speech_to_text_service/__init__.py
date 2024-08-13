@@ -15,6 +15,9 @@ from src.ml.speech_to_text_service.asr_client import ASRClient
 from src.ml.speech_to_text_service.vad_client import VadClient
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 
+from src.utils.ml_processing.lang2code_mapper import map_language_to_code
+
+
 logger = getLogger(__name__)
 
 
@@ -101,6 +104,8 @@ class SpeechToTextManager:
         return output_file
 
     def _remap_sentences(self, transcription: list[asr_client.WordTimestamp], lang: str) -> list[TextedSegment]:
+        lang = map_language_to_code(lang, "whisper")
+
         def load_spacy_model(language='xx') -> spacy.Language:
             spacy_languages = {
                 'en': "en_core_web_sm",
