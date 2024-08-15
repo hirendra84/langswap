@@ -16,22 +16,24 @@ class TranslationManager:
 
     _translator_client: TranslatorClient
 
-    def __init__(self, public_id: str, api_client: APIClient):
+    def __init__(self, public_id: str, api_client: APIClient, device: str, logger):
         self.public_id = public_id
         self._api_client = api_client
         # self._translator_client = DeepLClient('b95266dc-1675-4c76-86f4-c36dd6ab9a76:fx')
-        self._translator_client = SeamlessClient(key=None)
+        self._translator_client = SeamlessClient(device=device)
+        self.logger = logger
 
-    def translate(self, video_translation: VideoTranslation) -> VideoTranslation:
+    def translate(self, video_translation: VideoTranslation, source_lang, target_lang) -> VideoTranslation:
 
         segments = video_translation.recognized_texts
 
         sentences_texts = [s.text for s in segments]
 
-        # TODO: specify the languages
+        self.logger.file_logger.info(f'Step: Translate the segments')
         translations = self._translator_client.translate(sentences_texts,
-                                                         source_lang='rus',
-                                                         target_lang='eng')
+                                                         source_lang=source_lang,
+                                                         target_lang=target_lang)
+
 
         translated_segments = []
         for s, t in zip(segments, translations):
@@ -45,6 +47,10 @@ class TranslationManager:
                     generated_file=None
                 )
             )
+
+        json_segments = [{"translation": seg.translation, "text": seg.text} for seg in translated_segments]
+        self.logger.log_json(file_name="translations.json", data=json_segments)
+
 
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,

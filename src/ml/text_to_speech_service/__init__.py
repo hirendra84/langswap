@@ -31,7 +31,7 @@ class TextToSpeechManager:
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
-    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository, tts_sample_rate: int, device="cuda"):
+    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository, tts_sample_rate: int, logger, device="cuda"):
         self.public_id = public_id
         self._api_client = api_client
         self._file_repository = file_repository
@@ -39,9 +39,11 @@ class TextToSpeechManager:
         self.tts_sample_rate = tts_sample_rate
 
         self.audio_dubbing_manager = AudioDubbingManager(tts_sample_rate, file_repository)
-        self._tts_client = XTTSClient(file_repository=file_repository, device='cpu')
+        self._tts_client = XTTSClient(file_repository=file_repository, device=device)
         self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder=OPENVOICE_CONF_DIR,
-                                                    device='cpu')
+                                                    device=device)
+        self.logger = logger
+
 
     def synthesize(self, video_translation: VideoTranslation, source_lang: str, voice_conv=False, enhance=False, merge_pipeline="pause_based") -> VideoTranslation:
 
@@ -51,7 +53,8 @@ class TextToSpeechManager:
         db_manager = AudioDubbingManager(file_repository=self._file_repository, tts_sample_rate=5500)
         
         AudioDubbingManager.resample_save(vocals_audio.file_path, self.tts_sample_rate)
-        
+        self.logger.file_logger.info("Resampled vocals audio")
+
         splitted_audio_folder = self._file_repository.subdir("splitted_audio")
         video_translation = db_manager.split_audio_seconds(video_translation,
                                             vocals_audio.file_path,
@@ -60,15 +63,18 @@ class TextToSpeechManager:
                                             )
         
         if enhance:
+            self.logger.file_logger.info("Step: resampling pipeline on splitted audio")            
             enhanced_audio_folder = self._file_repository.subdir("enhanced_audio")
             video_translation = db_manager.enhance_pipeline(video_translation, enhanced_audio_folder)
-            
+
+        self.logger.file_logger.info("Step: text to speech basic pipeline")  
         generated_audio_folder = self._file_repository.subdir("generated_audio")
         video_translation = self._tts_client.tts_pipeline(
                     video_translation,
                     generated_audio_folder)
         
         if voice_conv:
+            self.logger.file_logger.info("Step: voice cloning pipeline")
             styled_audio_folder = self._file_repository.subdir("styled_audio")
             video_translation = self._speaker_conv_client.voice_conversion_pipeline(
                 video_translation,
