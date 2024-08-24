@@ -12,7 +12,7 @@ from src.file_repository import FileRepository
 from src.pipeline_models.models import RemoteFile
 from src.pipeline_models.models import TextedSegment, VideoTranslation
 from src.ml.speech_to_text_service import asr_client
-from src.ml.speech_to_text_service.asr_client import ASRClient, ASRClientFaster
+from src.ml.speech_to_text_service.asr_client import ASRClient, ASRClientFaster, ASRX
 from src.ml.speech_to_text_service.vad_client import VadClient
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 
@@ -32,7 +32,8 @@ class SpeechToTextManager:
     def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository, logger):
         self.public_id = public_id
         # self._asr_client = ASRClient("PMKV2A3076HULPET7XZSF7IITZP5H8SWICSCFI3L")
-        self._asr_client = ASRClientFaster(None)
+        # add device in another way
+        self._asr_client = ASRX(device="cuda")
         self._api_client = api_client
         self._file_repository = file_repository
 
@@ -84,12 +85,12 @@ class SpeechToTextManager:
                                       progress=30,
                                       status=ProcessStatus.in_progress)
 
-        self.logger.file_logger.info(f'Step: Remapping sentences spacy')
-        entries = self._remap_sentences_spacy(transcription.word_timestamps, lang=lang)
-        self.logger.log_json(file_name="splitted_sentences_spacy.json", data=entries)
+        # self.logger.file_logger.info(f'Step: Remapping sentences spacy')
+        # entries = self._remap_sentences_spacy(transcription.word_timestamps, lang=lang)
+        # self.logger.log_json(file_name="splitted_sentences_spacy.json", data=entries)
 
         self.logger.file_logger.info(f'Step: Splitting the sentences according to the pauses')
-        segments = self._remap_pauses(entries)
+        segments = self._remap_pauses(json_segments)
         json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end} for seg in segments]
         self.logger.log_json(file_name="splitted_sentences_pauses.json", data=json_segments)
             
