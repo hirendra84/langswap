@@ -45,9 +45,9 @@ RUN pip install --no-deps --no-cache-dir -r freeze.txt
 
 # COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 # COPY --from=builder /usr/local/bin /usr/local/bin
-# COPY data ./data
+COPY data ./data
 COPY src ./src
-COPY openvoice_conf /openvoice_conf
+# COPY openvoice_conf /openvoice_conf
 
 ENV PYTHONPATH="/app/:${PYTHONPATH}"
 ENV LOCAL_DEBUG="True"
