@@ -128,7 +128,7 @@ class ASRClientFaster:
         self.model = whisper.load_model("medium")
 
     def transcribe(self, source_file: str, lang: str) -> Output:
-        response = self.model.transcribe(source_file, word_timestamps=True, task="translate")
+        response = self.model.transcribe(source_file, word_timestamps=True)
         # response = self.model.transcribe(source_file, word_timestamps=True)
 
         all_words = []
