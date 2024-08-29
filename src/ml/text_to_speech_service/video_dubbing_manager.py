@@ -6,6 +6,7 @@ from src.file_repository import FileRepository
 from pyrubberband.pyrb import time_stretch
 import pandas as pd
 import numpy as np
+import torchaudio.transforms as T
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
 
@@ -31,6 +32,8 @@ class VideoDubbingManager:
         return pause_long, speech_timestamps
     
     def merge_pauses(self, wav_path, sr, timestamps):
+        resampler = T.Resample(sr, 16000)
+
         wav = read_audio(wav_path, sampling_rate=sr)
 
         audio_samples = [wav[timestamps[0]['start']: timestamps[0]['end'] + 1].unsqueeze(0)]

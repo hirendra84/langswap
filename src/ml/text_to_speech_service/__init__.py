@@ -11,7 +11,6 @@ from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingMana
 from src.ml.text_to_speech_service.video_dubbing_manager import VideoDubbingManager
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 from src.ml.text_to_speech_service.tts_client import XTTSClient, VoiceToneConverter
-from src.settings import OPENVOICE_CONF_DIR
 
 
 logger = getLogger(__name__)
@@ -33,13 +32,13 @@ class TextToSpeechManager:
 
         self.tts_sample_rate = tts_sample_rate
 
-        self.audio_dubbing_manager = AudioDubbingManager(tts_sample_rate, file_repository)
+        self.audio_dubbing_manager = AudioDubbingManager(file_repository)
         self.video_dubbing_manager = VideoDubbingManager(file_repository, logger)
         self._tts_client = XTTSClient(file_repository=file_repository, device=device)
-        self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder=OPENVOICE_CONF_DIR,
+        self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder="/home/milana/OpenVoice/OpenVoiceV2/",
                                                     device=device)
-        self.logger = logger
 
+        self.logger = logger
 
     def synthesize(self, video_translation: VideoTranslation, source_lang: str, voice_conv=False, enhance=False, merge_pipeline="pause_based") -> VideoTranslation:
 
@@ -99,13 +98,15 @@ class TextToSpeechManager:
             video_translation.background_audio.items()
         }
 
-        resulted_audio, save_sr = DemucsClient().merge_background(
+        self.logger.file_logger.info("Step: merge backgrounds back")
+        merged_background_audio, save_sr = DemucsClient().merge_background(
                     styled_audio.file_path,
                     audio_backgrounds,
         )
         
-        result_audio = self._file_repository.get_file("resulted_audio.wav")
-        torchaudio.save(result_audio.file_path, resulted_audio, save_sr)
+        self.logger.file_logger.info("Step: merge the video with audio")
+        result_audio = self._file_repository.get_file("merged_background_audio.wav")
+        torchaudio.save(result_audio.file_path, merged_background_audio, save_sr)
 
         resulted_video = self._file_repository.get_file("resulted_video.mp4")
         source_video = video_translation.source_file.file_path
@@ -122,7 +123,7 @@ class TextToSpeechManager:
             vad_filtered_audio=video_translation.vad_filtered_audio,
             recognized_texts=video_translation.recognized_texts,
             translated_texts=video_translation.translated_texts,
-            processed_video=resulted_video,
+            processed_video=resulted_video
         )
 
         self._api_client.update_video(self.public_id,
