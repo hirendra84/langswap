@@ -1,14 +1,10 @@
-#!/bin/sh
-set -eu
+#!/bin/bash
+set -e
 
-echo "Waiting for postgres..."
-
-while ! nc -z $POSTGRES_HOST 5432; do
-  sleep 0.1
-done
-
-echo "PostgreSQL started"
-
-poetry run alembic upgrade head
-
-exec poetry run "$@"
+if [ "$1" = "run" ]; then
+    python3 pipeline_check.py --file_path "$FILE_PATH" --base_dir "$BASE_DIR" --source_lang "$SOURCE_LANG" --target_lang "$TARGET_LANG" --name "$VIDEO_NAME"
+elif [ "$1" = "bash" ]; then
+    exec /bin/bash
+else
+    exec "$@"
+fi
