@@ -28,8 +28,7 @@ class FFmpegClient:
 
     def extract_audio(self, input_path, output_path, time_limit: int | None = None, target_sr=24000):
         """Extract audio from video."""
-        cmd = f"-y -i {input_path} -vn -map 0:a:0 -af aresample=resampler=soxr -ar {target_sr} -ac 1 -fflags +shortest -max_interleave_delta 0 -f wav {output_path}"
-
+        cmd = f"-y -i {input_path} -vn -acodec pcm_s16le -ar {target_sr} -ac 1 -f wav {limit_command} {output_path}"
         return self.run_command(cmd)
 
     def resample_audio(self, input_path, output_path, sample_rate: int = 16_000):
