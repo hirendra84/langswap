@@ -1,11 +1,12 @@
 import json
+import os
 
 def map_language_to_code(language, system="whisper"):
-    with open("language_codes.json") as f:
+    lang_file = "/app/src/utils/ml_processing/language_codes.json"
+    lang_file = os.path.abspath(lang_file)
+    with open(lang_file) as f:
         language2code = json.load(f)["lang2code"]
-    print(language2code)
-
-    assert language in language2code, "Language is not corrent."
+    assert language in language2code, f"Language {language} is not corrent."
     
     code = language2code[language][system]
     return code
