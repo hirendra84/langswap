@@ -48,45 +48,21 @@ class VideoDubbingManager:
         torchaudio.save(wav_path, audio_final, sr)
         return audio_final
     
-    def change_pauses(
-        self, wav_gen_path: str, wav_source_path: str, sr_gen: int, sr_source: int
-    ):
-        pause_dur_source, timestamps_source = self.get_pause(
-            wav_source_path, sr_source, seconds=True
-        )
-        pause_dur_gen, timestamps_gen = self.get_pause(
-            wav_gen_path, sr_gen, seconds=True
-        )
-
-        pause_reduction = -1
-
+    def change_pauses(self, wav_gen_path: str, wav_source_path: str,
+                    sr_gen: int, sr_source: int):
+        pause_dur_source, timestamps_source = self.get_pause(wav_source_path, sr_source, seconds=True)
+        pause_dur_gen, timestamps_gen = self.get_pause(wav_gen_path, sr_gen, seconds=True)
+        
         if pause_dur_gen:
-            pause_reduction = pause_dur_source / pause_dur_gen
+            pause_reduction = (pause_dur_gen - pause_dur_source) / pause_dur_gen
 
-        if pause_reduction == -1 and pause_dur_source:  # what is the check here (?)
-            print(f"in source the pause is {pause_dur_source}")
+            _, timestamps_gen = self.get_pause(wav_gen_path, sr=sr_gen, seconds=False)
+            for sp_idx, sp_data in enumerate(timestamps_gen):
+                if pause_reduction < 1: # TODO: change not to make a pass
+                    sp_data['pause'] = sp_data['pause']  - (pause_reduction * sp_data['pause'])
 
-        # TODO: optimize to make only one pass
-        _, timestamps_gen = self.get_pause(wav_gen_path, sr_gen, seconds=False)
-        for sp_idx, sp_data in enumerate(timestamps_gen):
-
-            if pause_reduction > 1:
-                sp_data["pause"] = pause_reduction * sp_data["pause"]
-
-            pause_red_ext = pause_reduction * sp_data["pause"]
-
-            # TODO: recheck the logic again
-            if pause_dur_gen < pause_dur_source:
-                # sp_data['pause'] = sp_data['pause'] + pause_red_ext
-                continue
-            else:
-                sp_data["pause"] = sp_data["pause"] - pause_red_ext
-
-            # sp_data['pause'] = sp_data['pause'] - (pause_reduction * sp_data['pause'])
-
-        audio = self.merge_pauses(wav_gen_path, sr_gen, timestamps_gen)
+            audio = self.merge_pauses(wav_gen_path, sr_gen, timestamps_gen)
         return audio
-
     
 
     def merge_timestamps_speedup(self, df, video_length, source_sample_rate):
@@ -163,6 +139,10 @@ class VideoDubbingManager:
         df["generated_audio_length"] = [0] * df.shape[0]
         df["generated_audio_pause"] = [0] * df.shape[0]
 
+        df["generated_audio_length"] = df["generated_audio_length"].astype(float)
+        df["generated_audio_pause"] = df["generated_audio_pause"].astype(float)
+        
+
         df["generated_start"] = [0] * df.shape[0]
         df["generated_end"] = [0] * df.shape[0]
 
@@ -201,8 +181,8 @@ class VideoDubbingManager:
 
             pause = torch.zeros((1, int(df.loc[idx, "pause"] * sr_generated)))
 
-            df["generated_audio_length"].iloc[idx] = audio_length
-            df["generated_audio_pause"].iloc[idx] = pause.shape[1] / sr_generated
+            df.loc[idx, "generated_audio_length"] = audio_length
+            df.loc[idx, "generated_audio_pause"] = pause.shape[1] / sr_generated
 
             audio_generated = torch.cat((audio_generated, audio, pause), dim=1)
 
