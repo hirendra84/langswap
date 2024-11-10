@@ -24,11 +24,15 @@ class VideoDubbingManager:
         wav = read_audio(wav_path, sampling_rate=sr)
         speech_timestamps = get_speech_timestamps(wav, self.model_vad, return_seconds=seconds)
 
-        speech_timestamps[0]['pause'] = 0
-        for t_idx in range(1, len(speech_timestamps)):
-            speech_timestamps[t_idx]['pause'] = speech_timestamps[t_idx]['start'] - speech_timestamps[t_idx - 1]['end']
+        pause_long = 0
+        if speech_timestamps:
 
-        pause_long = sum([i['pause'] for i in speech_timestamps])
+            speech_timestamps[0]['pause'] = 0
+            for t_idx in range(1, len(speech_timestamps)):
+                speech_timestamps[t_idx]['pause'] = speech_timestamps[t_idx]['start'] - speech_timestamps[t_idx - 1]['end']
+
+            pause_long = sum([i['pause'] for i in speech_timestamps])
+        
         return pause_long, speech_timestamps
     
     def merge_pauses(self, wav_path, sr, timestamps):
@@ -44,7 +48,7 @@ class VideoDubbingManager:
             audio_samples.append(audio)
         
         audio_final = torch.cat(audio_samples, dim=1)
-        self.logger.file_logger.info(f"Changed audio length is from {wav.shape[0] / sr} to {audio_final.shape[1] / sr}")
+        self.logger.file_logger.info(f"Changed audio length is from {wav.shape[0] / sr} to {audio_final.shape[1] / sr} to the file {wav_path} for sr {sr}")
         torchaudio.save(wav_path, audio_final, sr)
         return audio_final
     
@@ -54,6 +58,7 @@ class VideoDubbingManager:
         pause_dur_gen, timestamps_gen = self.get_pause(wav_gen_path, sr_gen, seconds=True)
         
         if pause_dur_gen:
+            print('changing the pauses')
             pause_reduction = (pause_dur_gen - pause_dur_source) / pause_dur_gen
 
             _, timestamps_gen = self.get_pause(wav_gen_path, sr=sr_gen, seconds=False)
@@ -62,35 +67,88 @@ class VideoDubbingManager:
                     sp_data['pause'] = sp_data['pause']  - (pause_reduction * sp_data['pause'])
 
             audio = self.merge_pauses(wav_gen_path, sr_gen, timestamps_gen)
+        else:
+            audio, sr_gen = torchaudio.load(wav_gen_path)
         return audio
     
 
-    def merge_timestamps_speedup(self, df, video_length, source_sample_rate):
-        """
-        Algorithm that works on time stretching - not the best one.
-        """
-        df['gen_dur'] = df['styled_generated_path'].apply(lambda audio_path: self.get_audio_length(audio_path))
-        df['pause'] = df['start'].shift(-1) - df['end'] # пауза между двумя предложениями 
-        df['pause'] = df['pause'].fillna(0)
-        df['dur_gen_pause'] = df['gen_dur'] + df['pause'] # длина сгенерированной речи + пауза, которую можно сделать 
-        df['duration_orig'] = df['end'] - df['start']
-        df['speed_rate'] = df['dur_gen_pause'] / df['duration_orig']
-        full_audio_blank = torch.zeros((1, int(video_length * source_sample_rate)))
+    def merge_timesteps_speedup(self, video_translation, vocals_audio):
+        df_dict = {"start": [], "end": []}
 
-        for i, line in df.iterrows():
-            audio, sr = torchaudio.load(line.styled_generated_path)
+        # fill in the df
+        for segment in video_translation.translated_texts:
+            df_dict["start"].append(segment.start)
+            df_dict["end"].append(segment.end)
 
-            start = line.start
-                    
-            audio = time_stretch(audio.squeeze().numpy(), sr, rate=line.speed_rate)
-            audio = torch.tensor(audio).unsqueeze(0)
+        df = pd.DataFrame.from_dict(df_dict)
+        df["pause"] = df["start"].shift(-1) - df["end"] # pause between two samples 
+        df["source_length"] = df["end"] - df["start"]
 
-            start_pos = int(start*source_sample_rate)
-            end_pos = int(start_pos + audio.shape[-1])
+        df["generated_audio_length"] = [0.0] * df.shape[0]
+        df["generated_audio_length_with_pause"] = [0.0] * df.shape[0]
+        df["generated_audio_pause"] = [0.0] * df.shape[0]
+        df["generated_end"] = [0] * df.shape[0]
+        
+        # calculate the last pause length
+        if df.shape[0] > 1:
+            source_audio, source_sr = torchaudio.load(vocals_audio)
+            target_audio_length = source_audio.shape[1] / source_sr
+            df.loc[df.shape[0] - 1, "pause"] = target_audio_length - df.loc[df.shape[0] - 1, "end"] # the last pause
+        elif df.shape[0] == 1:
+            source_audio, source_sr = torchaudio.load(vocals_audio)
+            target_audio_length = source_audio.shape[1] / source_sr           
+            df.loc[0, "pause"] = 0
+
+        # fill in with the pauses
+        _, sr_generated = torchaudio.load(video_translation.translated_texts[0].generated_file)
+        previous_pause = torch.zeros((1, int(video_translation.translated_texts[0].start * sr_generated)))
+
+        audio_generated = previous_pause
+        for idx, segment in enumerate(video_translation.translated_texts):
+            audio, sr_generated = torchaudio.load(segment.generated_file)
+            audio = self.change_pauses(segment.generated_file, segment.source_file,
+                                    sr_gen=sr_generated, sr_source=source_sr)
+
+            audio_length = audio.shape[1] / sr_generated
+
+            source_length = df["source_length"].iloc[idx]
+
+            if source_length - audio_length < 0:
+                # speed up the audio if the original was still shorter
+                rate = audio_length / source_length
+        
+                audio = time_stretch(audio.squeeze().numpy(), sr_generated, rate=rate)
+                audio = torch.tensor(audio).unsqueeze(0)
             
-            full_audio_blank[0, int(start_pos): int(end_pos)] = audio[0]
+            generated_audio_length = audio.shape[1] / sr_generated
 
-        return full_audio_blank
+            pause_extension = max(source_length - generated_audio_length, 0)
+
+            generated_audio_length = audio.shape[1] / sr_generated
+            df.loc[idx, "generated_audio_length"] = generated_audio_length
+
+            pause_size = df.loc[idx, "pause"]
+            pause = torch.zeros((1, int(pause_size + pause_extension) * sr_generated))
+
+            generated_pause_length = pause.shape[1] / sr_generated
+            df.loc[idx, "generated_audio_pause"] = generated_pause_length
+
+            audio_length_paused = generated_audio_length + pause_extension
+            df.loc[idx, "generated_end"] = df.loc[idx, 'start'] + audio_length_paused 
+            audio_generated = torch.cat((audio_generated, audio, pause), dim=1)
+        
+        generated_audio_length = audio_generated.shape[1] / sr_generated
+        speed_up_rate = generated_audio_length / target_audio_length
+
+        self.logger.file_logger.info(f"Rate for speed up is {speed_up_rate}")
+
+        if speed_up_rate > 1:
+            audio_generated = time_stretch(audio_generated.squeeze().numpy(), sr=sr_generated, rate=speed_up_rate)
+            audio_generated = torch.tensor(audio_generated).unsqueeze(0)
+
+        data_json = df.to_dict('records')
+        self.logger.log_json(data=data_json, file_name="pauses_for_stretch_whole.json")
+        return audio_generated, sr_generated
     
     def merge_timestamps_pause_based(self, video_translation, vocals_audio):
         """
@@ -152,6 +210,8 @@ class VideoDubbingManager:
             target_audio_length = source_audio.shape[1] / source_sr
             df.loc[df.shape[0] - 1, "pause"] = target_audio_length - df.loc[df.shape[0] - 1, "end"] # the last pause
         elif df.shape[0] == 1:
+            source_audio, source_sr = torchaudio.load(vocals_audio)
+            target_audio_length = source_audio.shape[1] / source_sr           
             df.loc[0, "pause"] = 0
 
         audio_first, sr_generated = torchaudio.load(video_translation.translated_texts[0].generated_file)
