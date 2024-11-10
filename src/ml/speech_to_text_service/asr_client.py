@@ -105,25 +105,30 @@ class ASRX:
     token: str
 
     def __init__(self, device) -> None:
-        compute_type = "float32" if device == "cpu" else "float16"
         model_path = (
             "./models_weights/whisper-large-v2/f0fe81560cb8b68660e564f55dd99207059c092e"
         )
-        model_path = os.path.abspath(model_path)
+        self.model_path_whisper = os.path.abspath(model_path)
 
-        self.model = whisperx.load_model(
-            model_path, device=device, compute_type=compute_type, local_files_only=True
-        )
+        self.model = None
+        self.diarize_model = None
 
-        token = "***REDACTED-HF-TOKEN***"  # secret, move somewhere
+        self.token = "***REDACTED-HF-TOKEN***"  # secret, move somewhere
         model_path_diarization = "./models_weights/pyannote/models--pyannote--speaker-diarization-3.1/snapshots/84fd25912480287da0247647c3d2b4853cb3ee5d/config.yaml"
-        model_path_diarization = os.path.abspath(model_path_diarization)
-
-        self.diarize_model = whisperx.DiarizationPipeline(
-            model_path_diarization, use_auth_token=token, device=device
-        )
+        self.model_path_diarization = os.path.abspath(model_path_diarization)
 
         self.device = device
+    
+    def load_models(self):
+        compute_type = "float32" if self.device == "cpu" else "float16"
+
+        self.model = whisperx.load_model(
+            self.model_path_whisper, device=self.device, compute_type=compute_type, local_files_only=True
+        )
+
+        self.diarize_model = whisperx.DiarizationPipeline(
+            self.model_path_diarization, use_auth_token=self.token, device=self.device
+        )
 
     def transcribe(self, source_file: str, lang="en") -> Output:
         language = map_language_to_code(lang, system="whisper")

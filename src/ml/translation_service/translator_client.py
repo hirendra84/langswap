@@ -2,7 +2,6 @@ from abc import ABC
 import json
 import torch
 from tqdm import tqdm
-# from seamless_communication.inference import Translator
 import os
 from src.utils.ml_processing.lang2code_mapper import map_language_to_code
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
@@ -21,14 +20,19 @@ class HugTranslationClient(TranslatorClient):
         super().__init__(device)
 
         if quantization_config is None:
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+            self.quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         self.device = device
         
-        path_to_model = os.path.abspath(path_to_model)
+        self.path_to_model = os.path.abspath(path_to_model)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(path_to_model, local_files_only=True, device_map=device)
-        self.model = AutoModelForCausalLM.from_pretrained(path_to_model, local_files_only=True, device_map=device,
-                                                        torch_dtype=torch.float16, quantization_config=quantization_config)
+        self.tokenizer = None
+        self.model = None
+
+    def load_models(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.path_to_model, local_files_only=True, device_map=self.device)
+        self.model = AutoModelForCausalLM.from_pretrained(self.path_to_model, local_files_only=True, device_map=self.device,
+                                                        torch_dtype=torch.float16, quantization_config=self.quantization_config)
+      
 
     def translate_sent(self, input_text: str, input_lang: str, output_lang: str) -> str:
         messages = [

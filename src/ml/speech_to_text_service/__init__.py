@@ -53,6 +53,8 @@ class SpeechToTextManager:
         return vad_filtered_audio_file
 
     def extract_and_transcribe(self, video_translation: VideoTranslation, lang: str) -> VideoTranslation:
+        if num_speakers is not None:
+            num_speakers = int(num_speakers)
         # video_name = self._file_repository.materialize_file(video_translation.source_file)
 
         audio_file = self._extract_audio(video_translation.source_file.file_path)
@@ -87,6 +89,8 @@ class SpeechToTextManager:
             with open(log_text, encoding="utf-8") as f:
                 json_segments = json.load(f)
         else:
+            self.logger.file_logger.info(f'Loading the model on the disk')
+            self._asr_client.load_models()
             transcription = self._asr_client.transcribe(vocal_file, lang=lang)
             json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
             self.logger.log_json(file_name=file_name, data=json_segments)
@@ -117,7 +121,6 @@ class SpeechToTextManager:
             segments = self._remap_pauses(json_segments)
             json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
             self.logger.log_json(file_name=file_name, data=json_segments)
-
 
         return VideoTranslation(
             public_id=video_translation.public_id,
