@@ -12,6 +12,8 @@ from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingMana
 from src.ml.text_to_speech_service.video_dubbing_manager import VideoDubbingManager
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 from src.ml.text_to_speech_service.tts_xtts_client import XTTSClient
+from src.ml.text_to_speech_service.tts_f5_client import FlowClient
+from src.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
 from src.ml.text_to_speech_service.voice_converter import VoiceToneConverter
 
 logger = getLogger(__name__)
@@ -26,7 +28,8 @@ class TextToSpeechManager:
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
-    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository, tts_sample_rate: int, logger, device="cuda"):
+    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository,
+                tts_sample_rate: int, logger, device="cuda", tts_name="xtts"):
         self.public_id = public_id
         self._api_client = api_client
         self._file_repository = file_repository
@@ -35,14 +38,24 @@ class TextToSpeechManager:
 
         self.audio_dubbing_manager = AudioDubbingManager(file_repository)
         self.video_dubbing_manager = VideoDubbingManager(file_repository, logger)
-        self._tts_client = XTTSClient(file_repository=file_repository, device=device)
-        # TODO add filter choice 
+        self._tts_client = None
+        self.choose_tts_client(tts_name, file_repository, device)
+
         model_path = os.path.abspath("./voice_conv/OpenVoiceV2")
         self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder=model_path,
                                                     device=device)
 
         self.logger = logger
-
+        self.audio_extensions = ["mp3", "wav", "MP3"]
+    
+    def choose_tts_client(self, name: str, file_repository, device):
+        if name == "xtts":
+            self._tts_client = XTTSClient(file_repository=file_repository, device=device)
+        elif name == "elevenlabs":
+            self._tts_client = ElevenTTSClient()
+        elif name == "f5tts":
+            self._tts_client = FlowClient()
+        
     def synthesize(self, video_translation: VideoTranslation, source_lang: str, target_lang: str, voice_conv=False, enhance=False, merge_pipeline="pause_based") -> VideoTranslation:
 
         vocals_audio = video_translation.background_audio["vocals.wav"]
@@ -91,7 +104,7 @@ class TextToSpeechManager:
                 vocals_audio
             ) 
         elif merge_pipeline == "speedup":
-            generated_audio, generated_sr = self.video_dubbing_manager.merge_timestamps_speedup(
+            generated_audio, generated_sr = self.video_dubbing_manager.merge_timesteps_speedup(
                 video_translation,
                 vocals_audio
             )
@@ -124,10 +137,13 @@ class TextToSpeechManager:
         resulted_video = self._file_repository.get_file("resulted_video.mp4")
         source_video = video_translation.source_file.file_path
 
-        FFmpegClient().replace_audio(source_video,
-                                     result_audio.file_path,
-                                     resulted_video.file_path)
-        self._file_repository.save_file(resulted_video)
+        base, extension = os.path.splitext(video_translation.source_file.file_path)
+
+        if extension not in self.audio_extensions:
+            FFmpegClient().replace_audio(source_video,
+                                        result_audio.file_path,
+                                        resulted_video.file_path)
+            self._file_repository.save_file(resulted_video)
 
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,
