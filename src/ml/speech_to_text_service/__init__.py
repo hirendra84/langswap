@@ -1,6 +1,4 @@
-import pandas as pd
 import os
-import spacy
 import json
 from typing import List, Dict
 from logging import getLogger
@@ -11,13 +9,10 @@ from src.ml.ffmpeg import FFmpegClient
 from src.file_repository import FileRepository
 from src.pipeline_models.models import RemoteFile
 from src.pipeline_models.models import TextedSegment, VideoTranslation
-from src.ml.speech_to_text_service import asr_client
-from src.ml.speech_to_text_service.asr_client import ASRClient, ASRClientFaster, ASRX
+from src.ml.speech_to_text_service.asr_client import ASRClient, ASRX
 from src.ml.speech_to_text_service.vad_client import VadClient
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 
-from src.utils.ml_processing.lang2code_mapper import map_language_to_code
-from src.utils.logging import Logger
 logger = getLogger(__name__)
 
 
@@ -38,6 +33,8 @@ class SpeechToTextManager:
 
         self.logger = logger
 
+        self.audio_extensions = ["mp3", "wav", "MP3"]
+
     def _resample_audio(self, audio_file: RemoteFile) -> RemoteFile:
         resampled_audio_file = self._file_repository.get_file(f'{audio_file.name}_resampled_{self.sample_rate}')
         (FFmpegClient()
@@ -52,13 +49,17 @@ class SpeechToTextManager:
             self.sample_rate)
         return vad_filtered_audio_file
 
-    def extract_and_transcribe(self, video_translation: VideoTranslation, lang: str) -> VideoTranslation:
+    def extract_and_transcribe(self, video_translation: VideoTranslation, num_speakers: int, lang: str) -> VideoTranslation:
         if num_speakers is not None:
             num_speakers = int(num_speakers)
         # video_name = self._file_repository.materialize_file(video_translation.source_file)
+        base, extension = os.path.splitext(video_translation.source_file.file_path)
 
-        audio_file = self._extract_audio(video_translation.source_file.file_path)
-        audio_file = self._file_repository.save_file(audio_file)
+        if extension in self.audio_extensions:
+            audio_file = video_translation.source_file.file_path
+        else:
+            audio_file = self._extract_audio(video_translation.source_file.file_path)
+            audio_file = self._file_repository.save_file(audio_file)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,
@@ -91,7 +92,7 @@ class SpeechToTextManager:
         else:
             self.logger.file_logger.info(f'Loading the model on the disk')
             self._asr_client.load_models()
-            transcription = self._asr_client.transcribe(vocal_file, lang=lang)
+            transcription = self._asr_client.transcribe(vocal_file, num_speakers=num_speakers, lang=lang)
             json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
             self.logger.log_json(file_name=file_name, data=json_segments)
 
@@ -119,7 +120,7 @@ class SpeechToTextManager:
                 )
         else:
             segments = self._remap_pauses(json_segments)
-            json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
+            json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in segments]
             self.logger.log_json(file_name=file_name, data=json_segments)
 
         return VideoTranslation(
@@ -134,7 +135,7 @@ class SpeechToTextManager:
     def _download_video(self, file: RemoteFile):
         return self._file_repository.materialize_file(file)
 
-    def _extract_audio(self, video_file_path, audio_file_name='extracted_audio') -> RemoteFile:
+    def _extract_audio(self, video_file_path, audio_file_name='extracted_audio.wav') -> RemoteFile:
         ffmpeg_client = FFmpegClient()
         output_file = self._file_repository.get_file(audio_file_name)
         out, err = ffmpeg_client.extract_audio(video_file_path,
@@ -145,7 +146,7 @@ class SpeechToTextManager:
 
         return output_file
 
-    def _remap_pauses(self, entries: List[Dict], pause_threshold=0.75, max_length=20, min_length=3): 
+    def _remap_pauses(self, entries: List[Dict], pause_threshold=0.9, max_length=5, min_length=3): 
         # algorithm to merge sentences according to the threshold
         pairs = []
         prev_end = entries[0]['end']
@@ -158,16 +159,19 @@ class SpeechToTextManager:
         for cur_sample in entries[1:]:
             if not check_is_text(cur_sample['text']):
                 continue
-
             conditions = [
                 # pause is long enough and we have collected more than five seconds 
-                ((cur_sample['start'] - prev_end) >= pause_threshold and (prev_end - start_idx >= min_length)),
+                # change for ElevenLabs that does not condition on one audio sample
+                # ((cur_sample['start'] - prev_end) >= pause_threshold and (prev_end - start_idx >= min_length)),
+                # (cur_sample['start'] - prev_end) >= pause_threshold,
                 # we have collected max length of audio 
                 (prev_end - start_idx > max_length),
+                
                 # speaker changed
                 cur_speaker != cur_sample['speaker'],
                 # not (prev_end - start_idx < 0.6)
-                    ]
+                ]
+            # print(f"what conditions are fullfilled {conditions}")
             # если пауза достаточно длинная и при этом мы собрали уже около 5 секунд или уже собрали больше 15 секунд
             if any(conditions):
                 pairs.append(
@@ -196,4 +200,10 @@ class SpeechToTextManager:
                     speaker=cur_sample['speaker']
                     )
                 )   
-        return pairs
+        # last sample use case - sometimes it is too short and should be better merged with a previous one
+        last_sample = pairs[-1]
+        if last_sample.end - last_sample.start < 3:
+            pairs[-2].text = pairs[-2].text + " " + last_sample.text
+            pairs[-2].end = last_sample.end
+            del pairs[-1]
+        return pairs 
