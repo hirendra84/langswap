@@ -1,5 +1,3 @@
-# Build stage
-# FROM python:3.11-slim AS builder
 FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -38,22 +36,10 @@ RUN pip install -r  requirements.txt
 RUN pip install amqp
 RUN pip install jmespath
 RUN pip install python-dateutil
+RUN pip install gradio
 
 RUN rm -rf /var/lib/apt/lists/*
 
-# COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-# COPY --from=builder /usr/local/bin /usr/local/bin
-
-# now we mount the disk without copying everything
-# COPY data ./data
-# COPY src ./src
-# COPY coqui ./coqui
-# COPY whisperX ./whisperX
-# COPY models_weights ./models_weights
-# COPY resemble ./resemble
-# COPY voice_conv ./voice_conv
-# COPY pyannote-audio ./pyannote-audio
-# COPY pipeline_check.py pipeline_check.py
 
 
 ENV PYTHONPATH="/app/:${PYTHONPATH}"
@@ -63,16 +49,8 @@ ENV OPENVOICE_CONF_DIR="/openvoice_conf"
 ENV BASE_WORKING_DIR="/app/data"
 
 
-# previous example of running the code:
-# ENV FILE_PATH=./data/shulman.mp4
-# ENV BASE_DIR=./data/shulman_example
-# ENV SOURCE_LANG=russian
-# ENV TARGET_LANG=english
-# ENV VIDEO_NAME=shulman
-# CMD ["python3", "pipeline_check.py", "--file_path", "$FILE_PATH", "--base_dir", "$BASE_DIR", "--source_lang", "$SOURCE_LANG", "--target_lang", "$TARGET_LANG", "--name", "$VIDEO_NAME"]
-
-# run with entrypoint.sh
+EXPOSE 4444
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["run"]
