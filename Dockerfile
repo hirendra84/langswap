@@ -37,6 +37,15 @@ RUN pip install amqp
 RUN pip install jmespath
 RUN pip install python-dateutil
 RUN pip install gradio
+RUN pip install torchdiffeq
+RUN pip install x_transformers
+RUN pip install wandb
+RUN pip install ema_pytorch
+RUN pip install datasets
+RUN pip install vocos
+RUN pip install cached_path
+RUN pip install elevenlabs
+RUN pip install gradio_log
 
 RUN rm -rf /var/lib/apt/lists/*
 

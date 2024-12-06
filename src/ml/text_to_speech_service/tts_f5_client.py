@@ -1,7 +1,7 @@
 import sys
 
 # TODO: change the paths
-sys.path.append("/media/shenzhen/simba9/app/F5-TTS")
+sys.path.append("/app/F5-TTS")
 
 from model.utils_infer import (
     load_vocoder,
@@ -25,9 +25,9 @@ import torchaudio
 class FlowClient:
     def __init__(
         self,
-        config_path="/media/shenzhen/simba9/app/F5-TTS/inference-cli.toml",
-        vocab_file='/media/shenzhen/simba9/app/F5-TTS/data/Emilia_ZH_EN_pinyin/vocab.txt',
-        vocos_local_path: str = "/home/milana/app/local_check_data/app/vocos-mel-24khz",
+        config_path="/app/F5-TTS/inference-cli.toml",
+        vocab_file='/app/F5-TTS/data/Emilia_ZH_EN_pinyin/vocab.txt',
+        vocos_local_path: str = "/app/vocos-mel-24khz",
     ):
         # TODO: change all the paths to relative
         self.config = tomli.load(open(config_path, "rb"))
@@ -37,7 +37,7 @@ class FlowClient:
         vocos = load_vocoder(is_local=True, local_path=vocos_local_path)
         self.tts = self.load_tts_flow()
 
-        self.ref_audio = "/media/shenzhen/simba9/app/F5-TTS/test_en_1_ref_short.wav"
+        self.ref_audio = "/app/F5-TTS/test_en_1_ref_short.wav"
         self.ref_text = self.config["ref_text"]
 
     def load_tts_flow(self):
