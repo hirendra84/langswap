@@ -13,6 +13,7 @@ class TextedSegment:
     text: str
     start: float
     end: float
+    speaker: str
 
 
 @attr.s(auto_attribs=True)
