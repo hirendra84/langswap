@@ -18,7 +18,7 @@ class TranslatorClient(ABC):
 class HugTranslationClient(TranslatorClient):
     def __init__(self, device="cuda", path_to_model="./models_weights/cohereforai-23/cohere/", is_quantization=None):
         super().__init__(device)
-
+        self.quantization_config = None
         if is_quantization is None:
             self.quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
