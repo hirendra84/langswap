@@ -39,6 +39,11 @@ class DemucsClient:
             
         speech_audio, speech_sr = torchaudio.load(generated_audio_path)
 
+        if speech_audio.shape[0] == 2:
+            speech_audio = torch.mean(speech_audio, 0).unsqueeze(0)
+
+        # return speech_audio, speech_sr
+
         audio = speech_audio
         for m in modes:
             sample_path = audio_backgrounds[m]
@@ -47,6 +52,8 @@ class DemucsClient:
                                 target_sr=speech_sr)
                        
             back_sound, sr = torchaudio.load(sample_path)
+            if back_sound.shape[0] == 2:
+                back_sound = torch.mean(back_sound, 0).unsqueeze(0)
 
             if back_sound.shape[1] > audio.shape[1]:
                 back_sound = back_sound[:, :speech_audio.shape[1]]

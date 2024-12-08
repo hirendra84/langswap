@@ -104,7 +104,7 @@ class TextToSpeechManager:
                 vocals_audio
             ) 
         elif merge_pipeline == "speedup":
-            generated_audio, generated_sr = self.video_dubbing_manager.merge_timesteps_speedup(
+            generated_audio, generated_sr = self.video_dubbing_manager.merge_timestamps_speedup(
                 video_translation,
                 vocals_audio
             )
