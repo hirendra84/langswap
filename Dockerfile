@@ -46,6 +46,7 @@ RUN pip install vocos
 RUN pip install cached_path
 RUN pip install elevenlabs
 RUN pip install gradio_log
+RUN pip install deepl
 
 RUN rm -rf /var/lib/apt/lists/*
 
