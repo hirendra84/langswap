@@ -16,8 +16,10 @@ from resemble.resemble_enhance.enhancer.inference import denoise, enhance
 class AudioDubbingManager:
     _file_repository: FileRepository
 
-    def __init__(self, file_repository: FileRepository):
+    def __init__(self, file_repository: FileRepository, device="cuda"):
         self._file_repository = file_repository
+
+        self.device = device
     
     @classmethod
     def resample_save(self, audio_path: str, target_sr=16000):
@@ -35,15 +37,15 @@ class AudioDubbingManager:
         return audio_path
     
     def enhance_audio(self, audio_path, save_path, solver="midpoint",
-                    nfe=64, tau=0.5, device="cuda:1"):
+                    nfe=64, tau=0.5):
         solver = solver.lower()
         nfe = int(nfe)
         lambd = 0.9
         dwav, sr = torchaudio.load(audio_path)
         dwav = dwav.mean(dim=0)
 
-        wav1, new_sr = denoise(dwav, sr, device)
-        wav2, new_sr = enhance(dwav, sr, device, nfe=nfe, solver=solver, lambd=lambd, tau=tau)
+        wav1, new_sr = denoise(dwav, sr, self.device)
+        wav2, new_sr = enhance(dwav, sr, self.device, nfe=nfe, solver=solver, lambd=lambd, tau=tau)
 
         wav2 = wav2.cpu().unsqueeze(0)
         

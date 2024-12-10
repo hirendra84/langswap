@@ -36,7 +36,7 @@ class TextToSpeechManager:
 
         self.tts_sample_rate = tts_sample_rate
 
-        self.audio_dubbing_manager = AudioDubbingManager(file_repository)
+        self.audio_dubbing_manager = AudioDubbingManager(file_repository, device=device)
         self.video_dubbing_manager = VideoDubbingManager(file_repository, logger)
         self._tts_client = None
         self.choose_tts_client(tts_name, file_repository, device)
