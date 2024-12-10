@@ -10,8 +10,8 @@ from src.pipeline_models.models import TranslatedTextedSegment
 
 class ElevenTTSClient:
 
-    def __init__(self):
-        self.client = ElevenLabs(api_key="")  # MOVE HIDDEN ELEVEN_API_KEY
+    def __init__(self, eleven_api_token):
+        self.client = ElevenLabs(api_key=eleven_api_token)  # MOVE HIDDEN ELEVEN_API_KEY
 
     def clone_voice(self, video_translation, voice_descr: str = "", voice_name=""):
         audio_files_source = []

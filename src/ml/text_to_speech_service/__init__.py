@@ -29,7 +29,7 @@ class TextToSpeechManager:
     audio_dubbing_manager: AudioDubbingManager
 
     def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository,
-                tts_sample_rate: int, logger, device="cuda", tts_name="xtts"):
+                tts_sample_rate: int, logger, device="cuda", tts_name="xtts", eleven_api_token=""):
         self.public_id = public_id
         self._api_client = api_client
         self._file_repository = file_repository
@@ -47,12 +47,13 @@ class TextToSpeechManager:
 
         self.logger = logger
         self.audio_extensions = ["mp3", "wav", "MP3"]
+        self.eleven_api_token = eleven_api_token
     
     def choose_tts_client(self, name: str, file_repository, device):
         if name == "xtts":
             self._tts_client = XTTSClient(file_repository=file_repository, device=device)
         elif name == "elevenlabs":
-            self._tts_client = ElevenTTSClient()
+            self._tts_client = ElevenTTSClient(self.eleven_api_token)
         elif name == "f5tts":
             self._tts_client = FlowClient()
         
