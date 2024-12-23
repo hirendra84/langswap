@@ -24,6 +24,7 @@ class TranslatedTextedSegment:
     translation: str
     source_file: str
     generated_file: str
+    speaker: str
 
 
 @attr.s(auto_attribs=True)
