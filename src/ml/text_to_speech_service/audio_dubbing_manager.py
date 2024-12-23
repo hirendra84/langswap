@@ -84,3 +84,14 @@ class AudioDubbingManager:
 
             video_translation.translated_texts[idx].source_file = save_path
         return video_translation
+
+    @classmethod
+    def merge_audio_files(self, files: List, audio_path: str):
+        merged_audio = AudioSegment.empty()
+
+        for file in files:
+            audio = AudioSegment.from_file(file)
+            merged_audio += audio
+
+        # Export the merged audio to a file
+        merged_audio.export(audio_path, format="wav")

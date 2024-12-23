@@ -9,7 +9,7 @@ from coqui.TTS.api import TTS
 from src.file_repository import FileRepository
 import os
 from src.utils.ml_processing.lang2code_mapper import map_language_to_code
-from .utils import add_pauses
+from .utils import add_pauses, merge_speaker_files
 
 
 class XTTSClient:
@@ -62,8 +62,18 @@ class XTTSClient:
             if not os.path.exists(file_path):
                 if self.model is None:
                     self.load_models()
+                if segment.end - segment.start < 4:
+                    source_file_updated = segment.source_file.replace(".wav", "_extended.wav")
 
-                add_pauses(segment.source_file)
+                    merge_speaker_files(video_translation,
+                                    segment.speaker,
+                                    idx,
+                                    source_file_updated
+                                    )
+                else:
+                    add_pauses(segment.source_file)
+
+
                 self.generate_audio(
                     segment.translation, segment.source_file, file_path, language
                 )
