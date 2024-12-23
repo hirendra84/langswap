@@ -22,7 +22,7 @@ class ElevenTTSClient:
         voice = self.client.clone(
             name=voice_name, description=voice_descr, files=audio_files_source[:24]
         )
-        isinstance(voice, Voice)
+        
         return voice
 
     def generate_audio(self, text: str, voice, save_path: str):
