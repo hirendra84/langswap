@@ -1,7 +1,7 @@
 import os
 from abc import ABC
 
-from elevenlabs import save
+from elevenlabs import save, Voice
 from elevenlabs.client import ElevenLabs
 from tqdm import tqdm
 
@@ -22,6 +22,7 @@ class ElevenTTSClient:
         voice = self.client.clone(
             name=voice_name, description=voice_descr, files=audio_files_source[:24]
         )
+        isinstance(voice, Voice)
         return voice
 
     def generate_audio(self, text: str, voice, save_path: str):
@@ -49,4 +50,5 @@ class ElevenTTSClient:
                     segment.translation, voice=voice, save_path=file_path
                 )
             video_translation.translated_texts[idx].generated_file = file_path
+        client.voices.delete(voice.voice_id)
         return video_translation

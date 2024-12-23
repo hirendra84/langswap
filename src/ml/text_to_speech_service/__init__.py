@@ -39,6 +39,7 @@ class TextToSpeechManager:
         self.audio_dubbing_manager = AudioDubbingManager(file_repository, device=device)
         self.video_dubbing_manager = VideoDubbingManager(file_repository, logger)
         self._tts_client = None
+        self.eleven_api_token = eleven_api_token
         self.choose_tts_client(tts_name, file_repository, device)
 
         model_path = os.path.abspath("./voice_conv/OpenVoiceV2")
@@ -47,7 +48,7 @@ class TextToSpeechManager:
 
         self.logger = logger
         self.audio_extensions = ["mp3", "wav", "MP3"]
-        self.eleven_api_token = eleven_api_token
+        
     
     def choose_tts_client(self, name: str, file_repository, device):
         if name == "xtts":
