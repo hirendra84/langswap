@@ -33,7 +33,7 @@ class TranslationManager:
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts
         sentences_texts = [s.text for s in segments]
-        
+        video_translation
         self.logger.file_logger.info(f'Step: Translate the segments')
 
         file_name = "translations.json"
@@ -51,7 +51,8 @@ class TranslationManager:
                                     end=s.end,
                                     translation=t["translation"],
                                     source_file=None,
-                                    generated_file=None
+                                    generated_file=None,
+                                    speaker=s.speaker
                                 )
                             )
         else:
@@ -69,7 +70,8 @@ class TranslationManager:
                             end=s.end,
                             translation=t,
                             source_file=None,
-                            generated_file=None
+                            generated_file=None,
+                            speaker=s.speaker
                         )
                     )
             json_segments = [{"translation": seg.translation, "text": seg.text} for seg in translated_segments]
