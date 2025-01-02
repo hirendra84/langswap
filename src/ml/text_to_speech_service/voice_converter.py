@@ -35,10 +35,10 @@ class VoiceToneConverter:
 
     def create_speaker(self, video_translation):
         self.merge_enhanced(video_translation)
+    
         cleaned_audio_path = video_translation.background_audio["vocals.wav"].replace(
             "vocals", "vocals_enhanced"
         )
-
         self.speaker = self.generate_speaker_embedding(cleaned_audio_path)
 
     def merge_enhanced(self, video_translation):
