@@ -50,5 +50,5 @@ class ElevenTTSClient:
                     segment.translation, voice=voice, save_path=file_path
                 )
             video_translation.translated_texts[idx].generated_file = file_path
-        client.voices.delete(voice.voice_id)
+        self.client.voices.delete(voice.voice_id)
         return video_translation
