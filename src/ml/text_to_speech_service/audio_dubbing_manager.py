@@ -82,7 +82,7 @@ class AudioDubbingManager:
             video_translation.translated_texts[idx].source_file = file_path
         return video_translation
 
-    def enhance_pipeline(self, video_translation, temp_folder):
+    def enhance_pipeline(self, video_translation, temp_folder, use_cashe: bool = True):
         for idx, segment in enumerate(
             tqdm(
                 video_translation.translated_texts,
@@ -95,7 +95,7 @@ class AudioDubbingManager:
             folder_path, audio_name = os.path.split(audio_path)
             save_path = os.path.join(temp_folder, audio_name)
             save_path = save_path.replace(".wav", "_enhanced.wav")
-            if not os.path.exists(save_path):
+            if  not use_cashe or not os.path.exists(save_path):
                 save_path = self.enhance_audio(audio_path, save_path)
 
             video_translation.translated_texts[idx].source_file = save_path

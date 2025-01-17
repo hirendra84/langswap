@@ -158,12 +158,13 @@ class ChangeManager:
         json_segments = [{"translation": seg.translation, "text": seg.text} for seg in self.video_translation.translated_texts]
         self.video_translation_pipeline.logger.log_json(file_name="translations.json", data=json_segments)
         
-        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline.api_client, self.video_translation_pipeline.file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
+        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._api_client, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
+        vocals_path = self.video_translation.background_audio["vocals.wav"]
         for update in updates:
-            tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], self.video_translation, source_lang=self.video_translation_pipeline.config.source_lang, target_lang=self.video_translation_pipeline.config.target_lang, voice_conv=True)
-        tts_manager.clear_result_video(self.video_translation_pipeline.file_repository.directory + "/resulted_video.mp4")
+            tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], target_lang=self.video_translation_pipeline.config.target_lang, vocals_path=vocals_path, voice_conv=True)
+        tts_manager.clear_result_video(self.video_translation_pipeline._file_repository.directory + "/resulted_video.mp4")
         
-        self.video_translation = tts_manager.synthesize(self.video_translation, source_lang=self.video_translation_pipeline.config.source_lang, target_lang=self.video_translation_pipeline.config.target_lang, voice_conv=True, merge_pipeline="stretch_whole", enhance=True)
+        self.video_translation = self.video_translation_pipeline._merge("stretch_whole")
         
         
     
