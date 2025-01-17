@@ -5,13 +5,10 @@ from logging import getLogger
 
 from src.ml.api_client import APIClient
 from src.pipeline_models.enums import ProcessStatus
-from src.ml.ffmpeg import FFmpegClient
 from src.file_repository import FileRepository
 from src.pipeline_models.models import VideoTranslation
 from src.pipeline_models.models import TranslatedTextedSegment
 from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
-from src.ml.text_to_speech_service.video_dubbing_manager import VideoDubbingManager
-from src.ml.text_to_speech_service.demucs_client import DemucsClient
 from src.ml.text_to_speech_service.tts_xtts_client import XTTSClient
 from src.ml.text_to_speech_service.tts_f5_client import FlowClient
 from src.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
@@ -40,7 +37,7 @@ class TextToSpeechManager:
         self.tts_sample_rate = tts_sample_rate
 
         self.audio_dubbing_manager = AudioDubbingManager(file_repository, device=device)
-        self.video_dubbing_manager = VideoDubbingManager(file_repository, logger)
+        
         self._tts_client = None
         self.eleven_api_token = eleven_api_token
         self.choose_tts_client(tts_name, file_repository, device)
@@ -50,13 +47,13 @@ class TextToSpeechManager:
                                                     device=device)
 
         self.logger = logger
-        self.audio_extensions = ["mp3", "wav", "MP3"]
+        
               
     def clear_result_video(self, path: str):
         if os.path.exists(path):
             os.remove(path)
          
-    def synthesize_segment(self, segment: TranslatedTextedSegment, video_translation: VideoTranslation, target_lang: str, source_lang: str, voice_conv: bool = False):
+    def synthesize_segment(self, segment: TranslatedTextedSegment, target_lang: str, voice_conv: bool = False):
         generated_audio_folder = self._file_repository.subdir("generated_audio")
         file_path = os.path.join(generated_audio_folder, f"{segment.start}_{segment.end}.wav")
         language = map_language_to_code(target_lang, "whisper")
@@ -93,7 +90,7 @@ class TextToSpeechManager:
         elif name == "f5tts":
             self._tts_client = FlowClient()
         
-    def synthesize(self, video_translation: VideoTranslation, source_lang: str, target_lang: str, voice_conv=False, enhance=False, merge_pipeline="pause_based") -> VideoTranslation:
+    def synthesize(self, video_translation: VideoTranslation, source_lang: str, target_lang: str, voice_conv=False, enhance=False) -> VideoTranslation:
 
         vocals_audio = video_translation.background_audio["vocals.wav"]
         # self._file_repository.materialize_file(vocals_audio)
@@ -130,66 +127,14 @@ class TextToSpeechManager:
                 source_lang=source_lang
             )
         
-        if merge_pipeline == "pause_based":
-            generated_audio, generated_sr = self.video_dubbing_manager.merge_timestamps_pause_based(
-                video_translation,
-                vocals_audio
-            )
-        elif merge_pipeline == "stretch_whole":
-            generated_audio, generated_sr = self.video_dubbing_manager.merge_timestamps_stretch_whole(
-                video_translation,
-                vocals_audio
-            ) 
-        elif merge_pipeline == "speedup":
-            generated_audio, generated_sr = self.video_dubbing_manager.merge_timestamps_speedup(
-                video_translation,
-                vocals_audio
-            )
-
-        # TODO: save correctly if need on the s3
-        styled_audio = self._file_repository.get_file("styled_full_audio.wav")
-        torchaudio.save(styled_audio.file_path, generated_audio, generated_sr)
-
-        # audio_backgrounds = {
-        #     name: self._file_repository.materialize_file(remote_file).file_path
-        #     for name, remote_file in
-        #     video_translation.background_audio.items()
-        # }
-        audio_backgrounds = {
-            name: remote_file
-            for name, remote_file in
-            video_translation.background_audio.items()
-        }
-
-        self.logger.file_logger.info("Step: merge backgrounds back")
-        merged_background_audio, save_sr = DemucsClient().merge_background(
-                    styled_audio.file_path,
-                    audio_backgrounds,
-        )
-
-        self.logger.file_logger.info("Step: merge the video with audio")
-        result_audio = self._file_repository.get_file("merged_background_audio.wav")
-        torchaudio.save(result_audio.file_path, merged_background_audio, save_sr)
-
-        resulted_video = self._file_repository.get_file("resulted_video.mp4")
-        source_video = video_translation.source_file.file_path
-
-        base, extension = os.path.splitext(video_translation.source_file.file_path)
-
-        if extension not in self.audio_extensions:
-            FFmpegClient().replace_audio(source_video,
-                                        result_audio.file_path,
-                                        resulted_video.file_path)
-            self._file_repository.save_file(resulted_video)
-
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=video_translation.extracted_audio,
+            background_audio=video_translation.background_audio,
             vad_filtered_audio=video_translation.vad_filtered_audio,
             recognized_texts=video_translation.recognized_texts,
             translated_texts=video_translation.translated_texts,
-            processed_video=resulted_video
         )
 
         self._api_client.update_video(self.public_id,
