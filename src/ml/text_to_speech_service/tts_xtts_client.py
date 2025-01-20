@@ -32,6 +32,13 @@ class XTTSClient:
         gpu = True if self.device == "cuda" else False
         self.model = TTS(model_path=self.tts_model_path, config_path=self.config_path, gpu=gpu)
 
+    def __enter__(self):
+        self.load_models()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.model = None
+
     def generate_audio(
         self, text: str, source_audio_path: str, save_path: str, language: str
     ):
@@ -60,8 +67,6 @@ class XTTSClient:
             file_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")
 
             if not os.path.exists(file_path):
-                if self.model is None:
-                    self.load_models()
                 if segment.end - segment.start < 4:
                     source_file_updated = segment.source_file.replace(".wav", "_extended.wav")
 

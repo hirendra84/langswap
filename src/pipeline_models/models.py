@@ -1,5 +1,7 @@
 import attr
-
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Tuple, Union, Dict
 
 @attr.s(auto_attribs=True)
 class RemoteFile:
@@ -37,3 +39,21 @@ class VideoTranslation:
     recognized_texts: list[TextedSegment] = attr.field(factory=list)
     translated_texts: list[TranslatedTextedSegment] = attr.field(factory=list)
     processed_video: RemoteFile | None = attr.ib(default=None)
+
+
+@dataclass
+class TranslationPipelineConfig:
+    source_lang: str
+    target_lang: str
+    source_video_path: Union[Path, str]
+    base_dir: Union[Path, str]
+    public_id: str
+    num_speakers: int = field(default=1)
+    device: str = field(default="cuda:1")
+    name: str = field(default="example")
+    
+
+@dataclass
+class TraslationUpdate:
+    index: int
+    text: str

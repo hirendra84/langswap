@@ -28,6 +28,14 @@ class VoiceToneConverter:
         self.tone_color_converter = ToneColorConverter(self.config_path, device=self.device)
         self.tone_color_converter.load_ckpt(self.checkpoint_path)
     
+    def __enter__(self):
+        self.load_models()
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.tone_color_converter = None
+        self.speaker = None
+    
     def generate_speaker_embedding(self, audio_path: str):
         se, _ = se_extractor.get_se(audio_path, self.tone_color_converter, vad=True)
         return se
@@ -35,10 +43,10 @@ class VoiceToneConverter:
 
     def create_speaker(self, video_translation):
         self.merge_enhanced(video_translation)
+    
         cleaned_audio_path = video_translation.background_audio["vocals.wav"].replace(
             "vocals", "vocals_enhanced"
         )
-
         self.speaker = self.generate_speaker_embedding(cleaned_audio_path)
 
     def merge_enhanced(self, video_translation):
@@ -60,7 +68,7 @@ class VoiceToneConverter:
             )
                 
 
-    def voice_conversion_pipeline(self, video_translation, temp_folder, source_lang):
+    def voice_conversion_pipeline(self, video_translation, temp_folder, source_lang, use_cashe: bool = True):
         for idx, segment in enumerate(
             tqdm(
                 video_translation.translated_texts,
@@ -71,10 +79,8 @@ class VoiceToneConverter:
             folder_path, audio_name = os.path.split(segment.source_file)
             audio_save_path = os.path.join(temp_folder, audio_name)
             
-            if not os.path.exists(audio_save_path):
-
-                if self.tone_color_converter is None:
-                    self.load_models()
+            if not use_cashe or not os.path.exists(audio_save_path):
+                
                 if self.speaker is None:
                     self.create_speaker(video_translation)
                     
