@@ -1,7 +1,7 @@
 import attr
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Literal
 
 @attr.s(auto_attribs=True)
 class RemoteFile:
@@ -48,9 +48,13 @@ class TranslationPipelineConfig:
     source_video_path: Union[Path, str]
     base_dir: Union[Path, str]
     public_id: str
+    voice_conv: bool = field(default=False)
     num_speakers: int = field(default=1)
-    device: str = field(default="cuda:1")
+    device: str = field(default="cuda")
     name: str = field(default="example")
+    dubbing_algo: Literal["speedup", "pause_based", "stretch_whole"] = field(default="speedup")
+    tts_model: Literal["xtts", "f5tts", "elevenlabs"] = field(default="xtts")
+    eleven_api_token: str = field(default=None)
     
 
 @dataclass

@@ -59,8 +59,8 @@ class VideoTranslationPipeline:
         
     def _generate_speech(self):
         torch.cuda.empty_cache()
-        tts_manager = TextToSpeechManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger, tts_sample_rate=24000)
-        self.video_translation = tts_manager.synthesize(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang, voice_conv=True, enhance=True)
+        tts_manager = TextToSpeechManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger, tts_sample_rate=24000, eleven_api_token=self.config.eleven_api_token)
+        self.video_translation = tts_manager.synthesize(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang, voice_conv=self.config.voice_conv, enhance=True)
     
     def _merge(self, merge_pipeline="stretch_whole"):
         video_dubbing_manager = VideoDubbingManager(self._file_repository, self.logger)
@@ -134,7 +134,7 @@ class VideoTranslationPipeline:
         self._generate_asr()
         self._generate_translation()
         self._generate_speech()
-        self.video_translation = self._merge("stretch_whole")
+        self.video_translation = self._merge(self.config.dubbing_algo)
         torch.cuda.empty_cache()
         return self.video_translation
 
@@ -161,10 +161,10 @@ class ChangeManager:
         tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._api_client, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
         vocals_path = self.video_translation.background_audio["vocals.wav"]
         for update in updates:
-            tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], target_lang=self.video_translation_pipeline.config.target_lang, vocals_path=vocals_path, voice_conv=True)
+            tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], target_lang=self.video_translation_pipeline.config.target_lang, vocals_path=vocals_path, voice_conv=self.video_translation_pipeline.config.voice_conv)
         tts_manager.clear_result_video(self.video_translation_pipeline._file_repository.directory + "/resulted_video.mp4")
         
-        self.video_translation = self.video_translation_pipeline._merge("stretch_whole")
+        self.video_translation = self.video_translation_pipeline._merge(self.video_translation_pipeline.config.dubbing_algo)
         
         
     
