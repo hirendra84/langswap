@@ -51,6 +51,7 @@ class TextToSpeechManager:
         
               
     def clear_result_video(self, path: str):
+        # TODO use file repositoty, for update resulted_video.mp4
         if os.path.exists(path):
             os.remove(path)
          
