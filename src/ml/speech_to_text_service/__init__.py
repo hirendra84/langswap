@@ -91,10 +91,11 @@ class SpeechToTextManager:
                 json_segments = json.load(f)
         else:
             self.logger.file_logger.info(f'Loading the model on the disk')
-            self._asr_client.load_models()
-            transcription = self._asr_client.transcribe(vocal_file, num_speakers=num_speakers, lang=lang)
-            json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
-            self.logger.log_json(file_name=file_name, data=json_segments)
+            with self._asr_client as asr_client:
+                asr_client.load_models()
+                transcription = self._asr_client.transcribe(vocal_file, num_speakers=num_speakers, lang=lang)
+                json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
+                self.logger.log_json(file_name=file_name, data=json_segments)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,

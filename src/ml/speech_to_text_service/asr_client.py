@@ -119,6 +119,15 @@ class ASRX:
 
         self.device = device
     
+    
+    def __enter__(self):
+        self.load_models()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.model = None
+        self.diarize_model = None
+
     def load_models(self):
         compute_type = "float32" if self.device == "cpu" else "float16"
 
