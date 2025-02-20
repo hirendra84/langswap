@@ -15,6 +15,7 @@ This project implements a serverless video translation pipeline designed for dep
 - Docker  
 - A Runpod account (for serverless deployment)
 - Environment variables for AWS credentials (or compatible storage) set via a `.env` file
+- A S3-compatible storage bucket (e.g., Yandex Cloud)
 
 ### Environment Setup
 
@@ -41,6 +42,9 @@ This will run test_input.json as an input without need to deploy the service.
 The project is intended for serverless deployment on Runpod. To deploy:
 
 1. **Build the Docker Image**
+
+   Before building the image, you need to download all model weights and put them in the `model_weights` folder. Otherwise, they would be downloaded during the first run of the service which isn't acceptable for the serverless deployment.
+
 
    Build the Docker container using the provided Dockerfile:
 
