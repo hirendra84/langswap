@@ -24,22 +24,18 @@ from typing import List
 
     
 class VideoTranslationPipeline:
-    def __init__(self, config: TranslationPipelineConfig):
+    def __init__(self, config: TranslationPipelineConfig, file_repository):
         self.config = config
 
         self._api_client = MockAPIClient('dontcare')
 
-        self._file_repository = LocalFileRepository(
-            self.config.public_id,
-            base_directory=self.config.base_dir,
-            s3_client=get_s3_client()
-        )
+        self._file_repository = file_repository
 
         file = RemoteFile(
             file_path=self.config.source_video_path,
             name=self.config.name
         )
-        self.file = self._file_repository.save_file(file, force=False)
+        #self.file = self._file_repository.save_file(file, force=False)
 
 
         self.logger = Logger(directory=self._file_repository.directory)
@@ -111,7 +107,7 @@ class VideoTranslationPipeline:
             FFmpegClient().replace_audio(source_video,
                                         result_audio.file_path,
                                         resulted_video.file_path)
-            self._file_repository.save_file(resulted_video)
+            self._file_repository.save_file(resulted_video, force=True)
 
         new_video_translation = VideoTranslation(
             public_id=self.video_translation.public_id,

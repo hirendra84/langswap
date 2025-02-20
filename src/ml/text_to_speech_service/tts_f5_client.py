@@ -1,8 +1,8 @@
 import sys
 
 # TODO: change the paths
-sys.path.append("/app/F5-TTS")
-
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../../F5-TTS"))
 from model.utils_infer import (
     load_vocoder,
     load_model,

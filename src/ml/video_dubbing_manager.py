@@ -122,8 +122,9 @@ class VideoDubbingManager:
         
         # calculate the last pause length
         source_audio, source_sr = torchaudio.load(vocals_audio)
+        target_audio_length = source_audio.shape[1] / source_sr
+
         if df.shape[0] > 1:
-            target_audio_length = source_audio.shape[1] / source_sr
             df.loc[df.shape[0] - 1, "pause"] = target_audio_length - df.loc[df.shape[0] - 1, "end"]
         elif df.shape[0] == 1:
             df.loc[0, "pause"] = 0

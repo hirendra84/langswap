@@ -47,6 +47,7 @@ RUN pip install cached_path
 RUN pip install elevenlabs
 RUN pip install gradio_log
 RUN pip install deepl
+RUN pip install runpod
 
 RUN rm -rf /var/lib/apt/lists/*
 
@@ -58,9 +59,11 @@ ENV COQUI_TOS_AGREED="1"
 ENV OPENVOICE_CONF_DIR="/openvoice_conf"
 ENV BASE_WORKING_DIR="/app/data"
 
+COPY . .
 
-EXPOSE 4444
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+#EXPOSE 4444
+#COPY entrypoint.sh /entrypoint.sh
+#RUN chmod +x /entrypoint.sh
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python3", "-u", "serverless.py"]
+#ENTRYPOINT ["/entrypoint.sh"]

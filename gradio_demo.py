@@ -34,6 +34,7 @@ def video_translation_pipeline(file_path_upload_video, source_lang, target_lang,
     target_lang = target_lang.lower()
     num_speakers = int(num_speakers)
     public_id = "folder"
+    print("process")
 
     dir_of_video = f"{base_dir}/{public_id}/"
     if os.path.exists(dir_of_video):
@@ -89,6 +90,7 @@ def video_translation_pipeline(file_path_upload_video, source_lang, target_lang,
 
 
 def gradio_demo():
+    print("test")
     with gr.Blocks() as demo:
         gr.Markdown("# Video Translation Pipeline")
         gr.Markdown("Upload a video and specify source/target languages for translation. The output will be a translated video.")
@@ -122,4 +124,5 @@ def gradio_demo():
     demo.launch(server_name="0.0.0.0", server_port=4444)
 
 if __name__ == "__main__":
+    print("main")
     gradio_demo()

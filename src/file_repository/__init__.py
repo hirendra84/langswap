@@ -1,16 +1,19 @@
 import io
 from abc import ABC
+from dotenv import load_dotenv
 
 import boto3
 import requests
 import os.path
 import urllib.request
-
+import requests
 from src.pipeline_models.models import RemoteFile
 from src.settings import LOCAL_DEBUG
 
+import os
 
-BUCKET = 'ds-dev-video-storage'
+load_dotenv()
+BUCKET = os.getenv('BUCKET', 'debug-bucket-langswap-bucket')
 
 
 class FileRepository(ABC):
@@ -65,12 +68,10 @@ class RemoteFileRepository(FileRepository):
             return self._cached_files[file.name]
 
         file_path = os.path.join(self._directory, file.name)
-        with urllib.request.urlopen(file.s3_url, stream=True) as response:
+        with requests.get(file.s3_url, stream=True) as response:
             response.raise_for_status()
             with open(file_path, 'wb') as f:
-                for chunk in response.read_chunked(chunk_size=self._download_chunk_size):
-                    if not chunk:
-                        break
+                for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
         remote_file = RemoteFile(
             name=file.name,
@@ -94,6 +95,7 @@ class RemoteFileRepository(FileRepository):
         return remote_file
 
     def save_file(self, file: RemoteFile, force: bool = False):
+        print(f"bucket: {BUCKET}, file: {file.file_path}")
         if file.s3_url and not force:
             return file
 
@@ -111,6 +113,7 @@ class RemoteFileRepository(FileRepository):
         return file
 
     def save_file_from_stream(self, file: RemoteFile, stream: io.BytesIO):
+        print(f"BUCKET: {BUCKET}")
         self._s3_client.upload_fileobj(stream, BUCKET, file.name)
         s3_url = self._s3_client.generate_presigned_url(
             ClientMethod='get_object',
