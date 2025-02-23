@@ -1,5 +1,6 @@
 data/
 app/
+model_weights/
 
 
 # Byte-compiled / optimized / DLL files

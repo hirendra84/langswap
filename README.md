@@ -52,6 +52,12 @@ The project is intended for serverless deployment on Runpod. To deploy:
    docker build -t your_dockerhub_username/video-translation-pipeline:latest .
    ```
 
+   Now you can run the container locally:
+
+   ```bash
+   docker run --env-file .env --gpus all -it your_dockerhub_username/video-translation-pipeline:latest
+   ```
+
 2. **Push to Dockerhub**
 
    Push your built image to Dockerhub:

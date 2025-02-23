@@ -32,38 +32,15 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install -r  requirements.txt
-
-RUN pip install amqp
-RUN pip install jmespath
-RUN pip install python-dateutil
-RUN pip install gradio
-RUN pip install torchdiffeq
-RUN pip install x_transformers
-RUN pip install wandb
-RUN pip install ema_pytorch
-RUN pip install datasets
-RUN pip install vocos
-RUN pip install cached_path
-RUN pip install elevenlabs
-RUN pip install gradio_log
-RUN pip install deepl
-RUN pip install runpod
-
 RUN rm -rf /var/lib/apt/lists/*
 
 
-
 ENV PYTHONPATH="/app/:${PYTHONPATH}"
-ENV LOCAL_DEBUG="True"
+ENV LOCAL_DEBUG="False"
 ENV COQUI_TOS_AGREED="1"
 ENV OPENVOICE_CONF_DIR="/openvoice_conf"
 ENV BASE_WORKING_DIR="/app/data"
 
 COPY . .
 
-#EXPOSE 4444
-#COPY entrypoint.sh /entrypoint.sh
-#RUN chmod +x /entrypoint.sh
-
 CMD ["python3", "-u", "serverless.py"]
-#ENTRYPOINT ["/entrypoint.sh"]

@@ -42,7 +42,7 @@ class VideoTranslationPipeline:
 
         self.video_translation = VideoTranslation(source_file=file, public_id=self.config.public_id)
         
-        self.audio_extensions = ["mp3", "wav", "MP3"]
+        self.audio_extensions = ["mp3", "wav"]
    
     def _generate_asr(self):
         stt_manager = SpeechToTextManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger)
@@ -103,11 +103,20 @@ class VideoTranslationPipeline:
 
         base, extension = os.path.splitext(self.video_translation.source_file.file_path)
 
-        if extension not in self.audio_extensions:
+        if extension.lower() not in self.audio_extensions:
             FFmpegClient().replace_audio(source_video,
                                         result_audio.file_path,
-                                        resulted_video.file_path)
+                                        resulted_video.file_path,
+                                        )
             self._file_repository.save_file(resulted_video, force=True)
+
+        if self.config.watermark:
+            self.logger.file_logger.info("Step: add watermark to the video")
+            FFmpegClient().add_watermark(resulted_video.file_path,
+                                          resulted_video.file_path)
+            self._file_repository.save_file(resulted_video, force=True)
+            self.logger.file_logger.info("Step: watermark added to the video")
+            
 
         new_video_translation = VideoTranslation(
             public_id=self.video_translation.public_id,

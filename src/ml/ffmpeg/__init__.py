@@ -1,7 +1,11 @@
 import shlex
 import subprocess
 from enum import Enum, auto
+import os
+from tempfile import NamedTemporaryFile
+import logging
 
+logger = logging.getLogger(__name__)
 
 class Util(Enum):
     ffmpeg = auto()
@@ -13,7 +17,11 @@ class FFmpegClient:
         self.ffprobe_path = ffprobe_path
 
     def run_command(self, command, util: Util = Util.ffmpeg):
-        """Run a custom FFmpeg command."""
+        """Run a custom FFmpeg command with -hide_banner added if necessary."""
+        # Always add -hide_banner if it is not already in the command
+        if "-hide_banner" not in command:
+            command = f"-hide_banner {command}"
+            
         util_path = self.ffprobe_path if util == Util.ffprobe else self.ffmpeg_path
 
         process = subprocess.run(shlex.split(f"{util_path} {command}"),
@@ -53,3 +61,30 @@ class FFmpegClient:
                f'copy -map 0:v:0 -map 1:a:0 {limit_command}'
                f'-f mp4 -shortest {video_output_path}')
         return self.run_command(cmd)
+
+    def add_watermark(self, input_path: str, output_path: str,
+                      text: str = "translated with langswap.app",
+                      fontcolor: str = "white",
+                      fontsize: int = 16,
+                      x: str = "w-tw-10",
+                      y: str = "h-th-10",
+                      fontfile: str = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+        """Adds a watermark using FFmpeg's drawtext filter. Handles in-place operations via a temporary file."""
+        in_place = os.path.abspath(input_path) == os.path.abspath(output_path)
+        if in_place:
+            tmp_dir, ext = os.path.dirname(input_path), os.path.splitext(input_path)[1]
+            with NamedTemporaryFile(suffix=ext, dir=tmp_dir, delete=False) as tmp:
+                temp_output_path = tmp.name
+        else:
+            temp_output_path = output_path
+
+        cmd = (f'-y -i {input_path} '
+               f'-vf "drawtext=text=\'{text}\':fontfile={fontfile}:fontcolor={fontcolor}:'
+               f'fontsize={fontsize}:x={x}:y={y}" -codec:a copy {temp_output_path}')
+        stdout, stderr = self.run_command(cmd)
+        # logger.info(f"stdout: {stdout}\nstderr: {stderr}")
+        if not os.path.exists(temp_output_path):
+            raise ValueError(f"FFmpeg failed to produce an output file. Error: {stderr}")
+        if in_place:
+            os.replace(temp_output_path, input_path)
+        return stdout, stderr

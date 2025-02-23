@@ -337,3 +337,20 @@ whisper-timestamped==1.14.2
 wrapt==1.16.0
 yarl==1.13.1
 yt-dlp==2023.11.16 # are we sure it works now (?)
+
+# --- Additional packages moved from the Dockerfile ---
+amqp
+jmespath
+python-dateutil
+# gradio
+torchdiffeq
+x_transformers
+wandb
+ema_pytorch
+datasets
+vocos
+cached_path
+elevenlabs
+# gradio_log
+deepl
+runpod
