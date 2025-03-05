@@ -2,11 +2,10 @@
     "input": {
         "source_language": "english",          
         "target_language": "russian",           
-        "tts_engine": "xtts",    
-        "token": "your_eleven_api_token",
-        "count_speakers": 1,
-        "name": "local_test_video_translation",
-        "public_id": "local_test_id",
-        "s3_video_url": "https://storage.yandexcloud.net/debug-bucket-langswap-bucket/source.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=YCAJEL0P0vvFhDtn6tapCck36%2F20250213%2Fru-central1%2Fs3%2Faws4_request&X-Amz-Date=20250213T132121Z&X-Amz-Expires=896400&X-Amz-Signature=51D179260F2006DA931108C79F5B348E473BAD4A45B719A6A47A8907E7931177&X-Amz-SignedHeaders=host"
+        "tts_engine": "xtts",
+        "count_speakers": 2,
+        "name": "claude_test_video_translation",
+        "public_id": "claude_test_id",
+        "s3_video_url": "https://storage.yandexcloud.net/langswap-videos-dev/claude.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=YCAJEHb66M9f2KjixgUYKyLja%2F20250305%2Fru-central1%2Fs3%2Faws4_request&X-Amz-Date=20250305T005740Z&X-Amz-Expires=2592000&X-Amz-Signature=46E18C1C0DB63C874B888C4771B91E58F75825F17C5A60ECD3E31CF1350D2D68&X-Amz-SignedHeaders=host"
     }
 }

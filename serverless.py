@@ -69,7 +69,8 @@ def handler(event):
     name = input.get('name', "video_translation")
     public_id = input.get('public_id', "public_id")
     s3_video_url = input.get("s3_video_url")
-   
+    watermark = input.get("watermark", True)
+
     s3_client = init_s3_client()
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
     file_path = get_file(repo, s3_video_url)
@@ -82,7 +83,8 @@ def handler(event):
         num_speakers, 
         tts_engine, 
         file_path, 
-        token 
+        token,
+        watermark
     )
     
     pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
@@ -107,7 +109,8 @@ def test_video_translation_local():
       #      "count_speakers": 1,
             "name": "local_test_video_translation",
             "public_id": "local_test_id",
-            "s3_video_url": "https://url_on_your_video_on_s3"  # provide a valid S3 URL
+            "s3_video_url": "https://url_on_your_video_on_s3",  # provide a valid S3 URL
+            "watermark": True   
         }
     }
     try:
