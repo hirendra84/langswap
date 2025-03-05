@@ -18,6 +18,7 @@ from src.utils.logging import Logger
 from src.ml.video_dubbing_manager import VideoDubbingManager
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 from src.ml.ffmpeg import FFmpegClient
+from src.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 from typing import List
 
@@ -47,6 +48,8 @@ class VideoTranslationPipeline:
     def _generate_asr(self):
         stt_manager = SpeechToTextManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger)
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers, lang=self.config.source_lang)
+        if self.config.source_lang == None:
+            self.config.source_lang = map_language_to_code(self.video_translation.source_lang_code, system="reverse_from_whisper")
 
     def _generate_translation(self):
         torch.cuda.empty_cache()
@@ -108,7 +111,7 @@ class VideoTranslationPipeline:
                                         result_audio.file_path,
                                         resulted_video.file_path,
                                         )
-            self._file_repository.save_file(resulted_video, force=True)
+            self._file_repository.save_file(resulted_video)
 
         if self.config.watermark:
             self.logger.file_logger.info("Step: add watermark to the video")

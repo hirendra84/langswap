@@ -32,6 +32,8 @@ class TranslatedTextedSegment:
 @attr.s(auto_attribs=True)
 class VideoTranslation:
     public_id: str
+
+    source_lang_code: str | None = attr.ib(default=None)
     source_file: RemoteFile | None = attr.ib(default=None)
     extracted_audio: RemoteFile | None = attr.ib(default=None)
     vad_filtered_audio: RemoteFile | None = attr.ib(default=None)
@@ -49,7 +51,7 @@ class TranslationPipelineConfig:
     base_dir: Union[Path, str]
     public_id: str
     voice_conv: bool = field(default=False)
-    num_speakers: int = field(default=1)
+    num_speakers: int = field(default=None)
     device: str = field(default="cuda")
     name: str = field(default="example")
     dubbing_algo: Literal["speedup", "pause_based", "stretch_whole"] = field(default="speedup")

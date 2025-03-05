@@ -49,7 +49,7 @@ class SpeechToTextManager:
             self.sample_rate)
         return vad_filtered_audio_file
 
-    def extract_and_transcribe(self, video_translation: VideoTranslation, num_speakers: int, lang: str) -> VideoTranslation:
+    def extract_and_transcribe(self, video_translation: VideoTranslation, num_speakers: int = None, lang: str = None) -> VideoTranslation:
         if num_speakers is not None:
             num_speakers = int(num_speakers)
         # video_name = self._file_repository.materialize_file(video_translation.source_file)
@@ -79,22 +79,30 @@ class SpeechToTextManager:
             name: path for path, name in background_paths
         }
 
-        self.logger.file_logger.info(f'Step: Transcribing for lang {lang}')
+        self.logger.file_logger.info(f'Step: Transcribing')
         vocal_file = background_files["vocals.wav"]
-
+        source_lang_code = None
         # transcribe
         file_name = "raw_transcribed_info.json"
         log_text = os.path.join(self._file_repository.directory, file_name)
-        if os.path.exists(log_text):
+        lang_file_name = "lang_detect_info.json"
+        log_lang = os.path.join(self._file_repository.directory, lang_file_name)
+        if os.path.exists(log_text) and os.path.exists(log_lang):
             self.logger.file_logger.info(f'Getting info from transcribed samples')
             with open(log_text, encoding="utf-8") as f:
                 json_segments = json.load(f)
+                
+                detect_lang = json.load(open(log_lang, encoding="utf-8"))
+                source_lang_code = detect_lang["detected_language"]
         else:
             self.logger.file_logger.info(f'Loading the model on the disk')
             with self._asr_client as asr_client:
-                asr_client.load_models()
+                #asr_client.load_models()
                 transcription = self._asr_client.transcribe(vocal_file, num_speakers=num_speakers, lang=lang)
+                source_lang_code = transcription.detected_language
                 json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
+                detect_lang = {"detected_language": source_lang_code}
+                self.logger.log_json(file_name=lang_file_name, data=detect_lang)
                 self.logger.log_json(file_name=file_name, data=json_segments)
 
         self._api_client.update_video(self.public_id,
@@ -125,6 +133,7 @@ class SpeechToTextManager:
             self.logger.log_json(file_name=file_name, data=json_segments)
 
         return VideoTranslation(
+            source_lang_code=source_lang_code,
             public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=audio_file,

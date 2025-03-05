@@ -60,12 +60,12 @@ def get_file(repo, s3_url):
 def handler(event):
     input = event['input']
     
-    source_language = input.get('source_language', 'chinise')
-    target_language = input.get('target_language', "chinise")
+    source_language = input.get('source_language', None)
+    target_language = input.get('target_language', "english")
     tts_engine = input.get("tts_engine", "xtts")
     token = input.get("token", None)
             
-    num_speakers = int(input.get('count_speakers', 1))
+    num_speakers = input.get('count_speakers', None)
     name = input.get('name', "video_translation")
     public_id = input.get('public_id', "public_id")
     s3_video_url = input.get("s3_video_url")
@@ -100,14 +100,14 @@ def test_video_translation_local():
     """
     test_event = {
         "input": {
-            "source_language": "english",          # change as needed
+          #  "source_language": "russian",          # change as needed
             "target_language": "spanish",           # change as needed
             "tts_engine": "xtts",                   # change as needed
             "token": "your_eleven_api_token",       # provide a valid token if required
-            "count_speakers": 1,
+      #      "count_speakers": 1,
             "name": "local_test_video_translation",
             "public_id": "local_test_id",
-            "s3_video_url": "s3://your_bucket/test_video.mp4"  # provide a valid S3 URL
+            "s3_video_url": "https://url_on_your_video_on_s3"  # provide a valid S3 URL
         }
     }
     try:

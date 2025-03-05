@@ -140,13 +140,17 @@ class ASRX:
         )
 
 
-    def transcribe(self, source_file: str, lang="en", num_speakers=None) -> Output:
-        language = map_language_to_code(lang, system="whisper")
+    def transcribe(self, source_file: str, lang=None, num_speakers=None) -> Output:
+        language = None
+        if lang != None:
+            language = map_language_to_code(lang, system="whisper")
+        
         audio = whisperx.load_audio(source_file)
+        
         response = self.model.transcribe(audio, language=language, batch_size=8)
 
         language = response["language"]
-
+        lang = language
         model_a, metadata = whisperx.load_align_model(
             language_code=response["language"], device=self.device
         )
