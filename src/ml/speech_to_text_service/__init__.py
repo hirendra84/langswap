@@ -163,7 +163,6 @@ class SpeechToTextManager:
         start_idx = entries[0]['start']
         cur_pair = [entries[0]]
         cur_speaker = entries[0]['speaker']
-
         check_is_text = lambda x: len([i for i in x if i.isalpha()]) > 0
 
         for cur_sample in entries[1:]:
@@ -191,7 +190,7 @@ class SpeechToTextManager:
                     end=prev_end,
                     speaker=cur_speaker
                     )
-                )                   
+                )               
                 cur_pair = [cur_sample]
                 prev_end = cur_sample['end']
                 start_idx = cur_sample['start']
@@ -207,13 +206,12 @@ class SpeechToTextManager:
                     text=" ".join([s['text'] for s in cur_pair]),
                     start=start_idx,
                     end=prev_end,
-                    speaker=cur_sample['speaker']
+                    speaker=cur_speaker
                     )
                 )   
         # last sample use case - sometimes it is too short and should be better merged with a previous one
         last_sample = pairs[-1]
-        if last_sample.end - last_sample.start < 3:
+        if last_sample.end - last_sample.start < 3 and len(pairs) > 1:
             pairs[-2].text = pairs[-2].text + " " + last_sample.text
             pairs[-2].end = last_sample.end
-            del pairs[-1]
         return pairs 
