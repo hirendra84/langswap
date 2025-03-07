@@ -16,12 +16,10 @@ def add_pauses(audio_path: str, num_sec=2):
 
 
 def merge_speaker_files(video_translation, target_speaker: str, idx: int,
-                    audio_path: str, window=2):
+                    audio_path: str, window=5):
 
     current_files_merge = []
-    window = min(max(1, len(video_translation.translated_texts) - 1), window)
-    #print(list(range(max(idx - window, 0), idx + window)))
-    for i in range(max(idx - window, 0), idx + window):
+    for i in range(max(idx - window, 0), min(idx + window, len(video_translation.translated_texts))):
         if video_translation.translated_texts[i].speaker == target_speaker:
             current_files_merge.append(video_translation.translated_texts[i].source_file)
         

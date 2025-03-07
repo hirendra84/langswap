@@ -63,24 +63,24 @@ class XTTSClient:
                 desc="Voice generation pipeline.",
                 leave=True,
             )
-        ):
+        ):  
             file_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")
-
             if not os.path.exists(file_path):
+                source_file = segment.source_file
                 if segment.end - segment.start < 4:
                     source_file_updated = segment.source_file.replace(".wav", "_extended.wav")
-
                     merge_speaker_files(video_translation,
                                     segment.speaker,
                                     idx,
                                     source_file_updated
                                     )
+                    source_file = source_file_updated
                 else:
                     add_pauses(segment.source_file)
-
-
+            
                 self.generate_audio(
-                    segment.translation, segment.source_file, file_path, language
+                    segment.translation, source_file, file_path, language
                 )
+                
             video_translation.translated_texts[idx].generated_file = file_path
         return video_translation
