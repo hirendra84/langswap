@@ -63,7 +63,7 @@ class VideoDubbingManager:
             audio_samples.append(audio)
         
         audio_final = torch.cat(audio_samples, dim=1)
-        self.logger.file_logger.info(f"Changed audio length is from {wav.shape[0] / sr} to {audio_final.shape[1] / sr} for file {wav_path}")
+        self.logger.file_logger.debug(f"Changed audio length is from {wav.shape[0] / sr} to {audio_final.shape[1] / sr} for file {wav_path}")
 
         torchaudio.save(wav_path, audio_final, sr)
         return audio_final
@@ -118,7 +118,7 @@ class VideoDubbingManager:
         df["generated_audio_length"] = [0.0] * df.shape[0]
         df["generated_audio_length_with_pause"] = [0.0] * df.shape[0]
         df["generated_audio_pause"] = [0.0] * df.shape[0]
-        df["generated_end"] = [0] * df.shape[0]
+        df["generated_end"] = [0.0] * df.shape[0]
         
         # calculate the last pause length
         source_audio, source_sr = torchaudio.load(vocals_audio)
@@ -155,20 +155,20 @@ class VideoDubbingManager:
                 fill_in_space = source_length + pause_size_to_take
 
                 pause_size_to_take = min(audio_length - source_length, pause_size_to_take)
-                pause_size_to_take = 0 if pause_size_to_take < 0 else pause_size_to_take
+                pause_size_to_take = max(pause_size_to_take, 0.0)
 
-                self.logger.file_logger.info(f"Changing the pause from {pause_size}")
+                self.logger.file_logger.debug(f"Changing the pause from {pause_size}")
 
                 audio_length -= pause_size_to_take # нужно ускорять в соответствии с измененной длиной 
                 pause_size -= pause_size_to_take 
 
-                self.logger.file_logger.info(f"Changing the pause to {pause_size} with taking additional pause {pause_size_to_take}")
+                self.logger.file_logger.debug(f"Changing the pause to {pause_size} with taking additional pause {pause_size_to_take}")
 
                 # if here 
                 if audio_length > (source_length + pause_size_to_take):
                     # speed up the audio if the original was still shorter
                     rate = audio_length / (source_length + pause_size_to_take)
-                    self.logger.file_logger.info(f"""Changed audio length with pauses is still longer,
+                    self.logger.file_logger.debug(f"""Changed audio length with pauses is still longer,
                         generated audio length is {audio_length},
                         source + pause {source_length + pause_size},
                         rate for speed up is {rate}""")
@@ -184,8 +184,9 @@ class VideoDubbingManager:
             #     pause_size -= (generated_audio_length - source_length)
             
             # pause length
-            pause_extension = max(source_length - generated_audio_length, 0)
-            pause = torch.zeros((1, int(pause_size + pause_extension) * sr_generated))
+            pause_extension = max(source_length - generated_audio_length, 0.0)
+            final_pause_length = max(pause_size + pause_extension, 0.0)
+            pause = torch.zeros((1, int(final_pause_length * sr_generated)))
 
             df.loc[idx, "generated_audio_pause"] = pause.shape[1] / sr_generated
             df.loc[idx, "generated_end"] = df.loc[idx, 'start'] + generated_audio_length + pause_extension 
@@ -200,7 +201,7 @@ class VideoDubbingManager:
             audio_generated = time_stretch(audio_generated.squeeze().numpy(), sr=sr_generated, rate=speed_up_rate)
             audio_generated = torch.tensor(audio_generated).unsqueeze(0)
 
-        self.logger.file_logger.info(f"Rate for speed up is {speed_up_rate}")
+        self.logger.file_logger.debug(f"Rate for speed up is {speed_up_rate}")
         self.logger.log_json(data=df.to_dict('records'), file_name="pauses_for_stretch_whole.json")
         return audio_generated, sr_generated
     
@@ -254,8 +255,8 @@ class VideoDubbingManager:
         df["generated_audio_pause"] = df["generated_audio_pause"].astype(float)
         
 
-        df["generated_start"] = [0] * df.shape[0]
-        df["generated_end"] = [0] * df.shape[0]
+        df["generated_start"] = [0.0] * df.shape[0]
+        df["generated_end"] = [0.0] * df.shape[0]
 
         if df.shape[0] > 1:
             # calculate the last pause length
@@ -302,7 +303,7 @@ class VideoDubbingManager:
         generated_audio_length = audio_generated.shape[1] / sr_generated
         speed_up_rate = generated_audio_length/target_audio_length
 
-        self.logger.file_logger.info(f"Rate for speed up is {speed_up_rate}")
+        self.logger.file_logger.debug(f"Rate for speed up is {speed_up_rate}")
         if speed_up_rate > 1:
             audio_generated = time_stretch(audio_generated.squeeze().numpy(), sr=sr_generated, rate=speed_up_rate)
             audio_generated = torch.tensor(audio_generated).unsqueeze(0)

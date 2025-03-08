@@ -29,8 +29,7 @@ class XTTSClient:
         self.model = None
 
     def load_models(self):
-        gpu = True if self.device == "cuda" else False
-        self.model = TTS(model_path=self.tts_model_path, config_path=self.config_path, gpu=gpu)
+        self.model = TTS(model_path=self.tts_model_path, config_path=self.config_path).to(self.device)
 
     def __enter__(self):
         self.load_models()

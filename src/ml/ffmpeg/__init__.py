@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 import logging
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class Util(Enum):
     ffmpeg = auto()
@@ -17,16 +18,15 @@ class FFmpegClient:
         self.ffprobe_path = ffprobe_path
 
     def run_command(self, command, util: Util = Util.ffmpeg):
-        """Run a custom FFmpeg command with -hide_banner added if necessary."""
-        # Always add -hide_banner if it is not already in the command
-        if "-hide_banner" not in command:
-            command = f"-hide_banner {command}"
-            
+        """Run a custom FFmpeg command quietly by ensuring the quiet log level is set."""
+        command = f"-hide_banner -loglevel error {command}"
+        
         util_path = self.ffprobe_path if util == Util.ffprobe else self.ffmpeg_path
-
         process = subprocess.run(shlex.split(f"{util_path} {command}"),
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
+        if process.stderr:
+            logger.debug(f"Command error: {process.stderr}")
         return process.stdout, process.stderr
 
     def convert_video(self, input_path, output_path, output_format):
@@ -56,9 +56,9 @@ class FFmpegClient:
         limit_command = ''
         if time_limit:
             limit_command = f'-t {time_limit}'
-
-        cmd = (f'-i {video_input_path} -i {audio_input_path} -c:v '
-               f'copy -map 0:v:0 -map 1:a:0 {limit_command}'
+        logger.debug(f"Running command: {video_input_path} {audio_input_path} {video_output_path} {limit_command}")
+        cmd = (f'-y -i {video_input_path} -i {audio_input_path} -c:v '
+               f'copy -map 0:v:0 -map 1:a:0 {limit_command} '
                f'-f mp4 -shortest {video_output_path}')
         return self.run_command(cmd)
 

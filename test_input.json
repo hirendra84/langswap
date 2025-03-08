@@ -3,8 +3,8 @@
         "target_language": "russian",           
         "tts_engine": "f5tts",
         "watermark": true,
-        "name": "claude_test_video_translation",
-        "public_id": "claude_test_id",
+        "name": "123",
+        "public_id": "123",
         "s3_video_url": "https://storage.yandexcloud.net/langswap-videos-dev/claude.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=YCAJEHb66M9f2KjixgUYKyLja%2F20250305%2Fru-central1%2Fs3%2Faws4_request&X-Amz-Date=20250305T005740Z&X-Amz-Expires=2592000&X-Amz-Signature=46E18C1C0DB63C874B888C4771B91E58F75825F17C5A60ECD3E31CF1350D2D68&X-Amz-SignedHeaders=host"
     }
 }

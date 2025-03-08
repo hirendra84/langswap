@@ -218,7 +218,7 @@ class LocalFileRepository(FileRepository):
                     'Bucket': BUCKET,
                     'Key': file.file_path
                 },
-                ExpiresIn=60 * 60 * 48  # 48 hours
+                ExpiresIn=60 * 60 * 14  # 14 days
             )
         file.s3_url = s3_url
         return file

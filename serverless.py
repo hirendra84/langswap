@@ -1,3 +1,4 @@
+from itertools import tee
 from dotenv import load_dotenv
 import runpod
 import time
@@ -5,6 +6,8 @@ import boto3
 import os
 import io
 import sys  # Added to process command-line arguments
+import logging
+import warnings
 
 from src.translation_pipeline import VideoTranslationPipeline
 from src.translation_pipeline import ChangeManager
@@ -13,6 +16,10 @@ from src.pipeline_models.models import TraslationUpdate
 from src.file_repository import RemoteFile, RemoteFileRepository, LocalFileRepository
 
 load_dotenv()
+
+# Set the global logging level to WARNING to hide INFO messages
+logging.disable(logging.DEBUG)
+
 
 def init_s3_client():
     s3 = boto3.client('s3',
@@ -106,7 +113,7 @@ def test_video_translation_local():
         "input": {
           #  "source_language": "russian",          # change as needed
             "target_language": "spanish",           # change as needed
-            "tts_engine": "xtts",                   # change as needed
+            "tts_engine": "f5tts",                   # change as needed
             "token": "your_eleven_api_token",       # provide a valid token if required
       #      "count_speakers": 1,
             "name": "local_test_video_translation",
