@@ -31,7 +31,8 @@ def create_videotranslate_config(source_lang,
                                  num_speakers, 
                                  tts_engine, 
                                  file_path, 
-                                 token
+                                 token,
+                                 watermark
     ):
     config = TranslationPipelineConfig(
         source_lang=source_lang,
@@ -45,7 +46,8 @@ def create_videotranslate_config(source_lang,
         voice_conv=False,
         tts_model=tts_engine,
         dubbing_algo="speedup",
-        eleven_api_token=token
+        eleven_api_token=token,
+        watermark=watermark
     ) 
     return config
 
