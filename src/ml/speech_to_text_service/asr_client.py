@@ -158,7 +158,7 @@ class ASRX:
         )
 
         self.diarize_model = whisperx.DiarizationPipeline(
-            self.model_path_diarization, use_auth_token=self.token, device=self.device
+            self.model_path_diarization, device=self.device
         )
 
 
