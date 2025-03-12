@@ -1,193 +1,155 @@
-import torch
 import torchaudio
+import os
 
 from logging import getLogger
 
 from src.ml.api_client import APIClient
 from src.pipeline_models.enums import ProcessStatus
-from src.ml.ffmpeg import FFmpegClient
 from src.file_repository import FileRepository
 from src.pipeline_models.models import VideoTranslation
+from src.pipeline_models.models import TranslatedTextedSegment
 from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
-from src.ml.text_to_speech_service.demucs_client import DemucsClient
-from src.ml.text_to_speech_service.tts_client import TTSClient, XTTSClient
-from src.ml.speech_to_text_service import VadClient
-from pyrubberband.pyrb import time_stretch
+from src.ml.text_to_speech_service.tts_client import TTSClient
+from src.ml.text_to_speech_service.tts_xtts_client import XTTSClient
+from src.ml.text_to_speech_service.tts_f5_client import FlowClient
+from src.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
+from src.ml.text_to_speech_service.voice_converter import VoiceToneConverter
+from src.utils.ml_processing.lang2code_mapper import map_language_to_code
+
 
 logger = getLogger(__name__)
 
 
 class TextToSpeechManager:
     public_id: str
-
+    # pass it
     _tts_client: TTSClient
     _api_client: APIClient
     _file_repository: FileRepository
-    sample_rate: int = 48_000
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
-    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository):
+    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository,
+                tts_sample_rate: int, logger, device="cuda", tts_name="xtts", eleven_api_token=""):
         self.public_id = public_id
         self._api_client = api_client
         self._file_repository = file_repository
 
-        self.audio_dubbing_manager = AudioDubbingManager(self.tts_sample_rate,
-                                                         file_repository)
-        self._tts_client = XTTSClient()
+        self.tts_sample_rate = tts_sample_rate
+
+        self.audio_dubbing_manager = AudioDubbingManager(file_repository, device=device)
+        
+        self._tts_client = None
+        self.eleven_api_token = eleven_api_token
+        self.choose_tts_client(tts_name, file_repository, device)
+
+        model_path = os.path.abspath("./voice_conv/OpenVoiceV2")
+        self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder=model_path,
+                                                    device=device)
+
+        self.logger = logger
+        
+              
+    def clear_result_video(self, path: str):
+        # TODO use file repositoty, for update resulted_video.mp4
+        if os.path.exists(path):
+            os.remove(path)
+         
+    def synthesize_segment(self, segment: TranslatedTextedSegment, target_lang: str, vocals_path: str, voice_conv: bool = False):
+        generated_audio_folder = self._file_repository.subdir("generated_audio")
+        file_path = os.path.join(generated_audio_folder, f"{segment.start}_{segment.end}.wav")
+        language = map_language_to_code(target_lang, "whisper")
+        
+        with self._tts_client as tts_client:
+            tts_client.generate_audio(
+            segment.translation, segment.source_file, file_path, language
+        )
+        segment.generated_file = file_path
+        if voice_conv:
+            self.logger.file_logger.info("Step: voice cloning pipeline")
+            
+            with self._speaker_conv_client as speaker_conv_client:
+                speaker = speaker_conv_client.generate_speaker_embedding(segment.generated_file)
+                
+                styled_audio_folder = self._file_repository.subdir("styled_audio")
+                _, audio_name = os.path.split(segment.source_file)
+                audio_save_path = os.path.join(styled_audio_folder, audio_name)
+                
+                cleaned_audio_path = vocals_path.replace(
+                    "vocals", "vocals_enhanced"
+                )
+                source_spekaer = speaker_conv_client.generate_speaker_embedding(cleaned_audio_path)
+                print(segment.generated_file)
+                speaker_conv_client.tone_color_converter.convert(
+                    audio_src_path=segment.generated_file,
+                    src_se=speaker,
+                    tgt_se=source_spekaer,
+                    output_path=audio_save_path,
+                )
+                segment.generated_file = audio_save_path
+            
+            
     
-    def get_audio_length(self, audio_path):
-        audio, sr = torchaudio.load(audio_path)
-        return audio.shape[1] / sr
-
-    def sanity_check(self, df, target_sample_rate):
-        # TODO: delete it. 
-        for row in df.iterrows():
-            AudioDubbingManager.resample_save(row[1].styled_generated_path,
-                        target_sr=target_sample_rate)
-
-    def synthesize(self, video_translation: VideoTranslation) -> VideoTranslation:
+    
+    def choose_tts_client(self, name: str, file_repository, device):
+        if name == "xtts":
+            self._tts_client = XTTSClient(file_repository=file_repository, device=device)
+        elif name == "elevenlabs":
+            self._tts_client = ElevenTTSClient(self.eleven_api_token)
+        elif name == "f5tts":
+            self._tts_client = FlowClient()
+        
+    def synthesize(self, video_translation: VideoTranslation, source_lang: str, target_lang: str, voice_conv=False, enhance=False) -> VideoTranslation:
 
         vocals_audio = video_translation.background_audio["vocals.wav"]
-        self._file_repository.materialize_file(vocals_audio)
+        # self._file_repository.materialize_file(vocals_audio)
 
-        db_manager = AudioDubbingManager(file_repository=self._file_repository,
-                                         tts_sample_rate=self.tts_sample_rate)
+        db_manager = AudioDubbingManager(file_repository=self._file_repository)
+        AudioDubbingManager.resample_save(vocals_audio, self.tts_sample_rate)
+        self.logger.file_logger.info("Resampled vocals audio")
         
-        # vocal file 44100 -> 16000 for vad
-        db_manager.resample_save(vocals_audio.file_path, target_sr=16000)
-
-        vad_filtered_audio_file = self._file_repository.get_file(f'{vocals_audio.name}_vad')
-        vad_filtered_audio_file.file_path = VadClient().vad_filter(
-            vocals_audio.file_path,
-            vad_filtered_audio_file.file_path,
-            sample_rate=16000)
+        splitted_audio_folder = self._file_repository.subdir("splitted_audio")
+        video_translation = db_manager.split_audio_seconds(video_translation,
+                                            vocals_audio,
+                                            splitted_audio_folder,
+                                            sample_rate=self.tts_sample_rate,
+                                            )
         
-        db_manager.resample_save(vad_filtered_audio_file.file_path,
-                                 target_sr=self.tts_sample_rate)
+        if enhance:
+            self.logger.file_logger.info("Step: resampling pipeline on splitted audio")
+            enhanced_audio_folder = self._file_repository.subdir("enhanced_audio")
+            video_translation = db_manager.enhance_pipeline(video_translation, enhanced_audio_folder)
         
-        # split source -> generate tts -> style from tts
-        df = db_manager.split_audio_seconds(video_translation.recognized_texts,
-                                            vocals_audio.file_path,
-                                            sample_rate=self.tts_sample_rate)
-        generated_audio_folder = self._file_repository.subdir("generated_audio")
-        generated_audio_names_paths = self._tts_client.generate_audio(
-                    video_translation.translated_texts,
-                    generated_audio_folder,
-                    vad_filtered_audio_file.file_path,
-                    lang='en')
-
-        for idx, name_path in enumerate(generated_audio_names_paths):
-            df.loc[idx, "generated_path"] = name_path[1]  # path
-        styled_folder = self._file_repository.subdir('styled_generated_audio')
-        df_styled_audio = self._tts_client.style_audio(
-                    styled_folder,
-                    df)
-        # resample audio to the previous sample rate (!)
-        self.sanity_check(df_styled_audio, self.sample_rate)
-
-        extracted_audio_file = self._file_repository.materialize_file(
-            video_translation.extracted_audio
-        )
-        video_length = FFmpegClient().get_audio_length(extracted_audio_file.file_path)
-
-        generated_audio = self.merge_timestamps_speedup(
-            df_styled_audio,
-            video_length=video_length,
-            source_sample_rate=self.sample_rate
-        )
-
-        # TODO: save correctly if need on the s3
-        styled_audio = self._file_repository.get_file("styled_full_audio.wav")
-        torchaudio.save(styled_audio.file_path, generated_audio, self.sample_rate)
-
-        audio_backgrounds = {
-            name: self._file_repository.materialize_file(remote_file).file_path
-            for name, remote_file in
-            video_translation.background_audio.items()
-        }
-
-        resulted_audio = DemucsClient().merge_background(
-                    styled_audio.file_path,
-                    audio_backgrounds,
-        )
+        with self._tts_client as tts_client:
+            self.logger.file_logger.info("Step: text to speech basic pipeline")
+            generated_audio_folder = self._file_repository.subdir("generated_audio")
+            video_translation = tts_client.tts_pipeline(
+                        video_translation,
+                        generated_audio_folder,
+                        language=target_lang)
         
-        result_audio = self._file_repository.get_file("resulted_audio.wav")
-        torchaudio.save(result_audio.file_path, resulted_audio, self.sample_rate)
-
-        source_video = self._file_repository.materialize_file(
-            video_translation.source_file
-        )
-        resulted_video = self._file_repository.get_file('resulted_video.mp4')
-
-        # TODO: it will not work without not saved properly resulted video
-        FFmpegClient().replace_audio(source_video.file_path,
-                                     result_audio.file_path,
-                                     resulted_video.file_path)
-        self._file_repository.save_file(resulted_video)
-
+        if voice_conv:
+            self.logger.file_logger.info("Step: voice cloning pipeline")
+            styled_audio_folder = self._file_repository.subdir("styled_audio")
+            with self._speaker_conv_client as speaker_conv_client:
+                video_translation = speaker_conv_client.voice_conversion_pipeline(
+                    video_translation,
+                    styled_audio_folder,
+                    source_lang=source_lang
+                )
+        
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=video_translation.extracted_audio,
+            background_audio=video_translation.background_audio,
             vad_filtered_audio=video_translation.vad_filtered_audio,
             recognized_texts=video_translation.recognized_texts,
             translated_texts=video_translation.translated_texts,
-            processed_video=resulted_video,
         )
 
         self._api_client.update_video(self.public_id,
                                       new_video_translation,
                                       progress=10,
                                       status=ProcessStatus.done)
-
         return new_video_translation
-
-    def merge_timestamps_speedup(self, df, video_length, source_sample_rate):
-        """
-        Algorithm that work on time stretching - not the best one.
-        """
-        df['gen_dur'] = df['styled_generated_path'].apply(lambda audio_path: self.get_audio_length(audio_path))
-        df['pause'] = df['start'].shift(-1) - df['end'] # пауза между двумя предложениями 
-        df['pause'] = df['pause'].fillna(0)
-        df['dur_gen_pause'] = df['gen_dur'] + df['pause'] # длина сгенерированной речи + пауза, которую можно сделать 
-        df['place_gen'] = df['end'] - df['start'] + df['pause'] # место, которое можно поставить для сгенерированной фразы 
-        df['need_time'] = df['gen_dur'] - df['place_gen'] # сколько времени необходимо, если < 0 - то, все ок, если > 0, то нужно что-то сделать  
-        df['new_start'] = df.apply(lambda x: x.start - x.need_time if x.need_time > 0 else x.start, axis=1)
-        df['need_speedup'] = df['gen_dur'] > df['place_gen']
-        df['duration_orig'] = df['end'] - df['start']
-        df['speed_rate'] = df['dur_gen_pause'] / df['duration_orig']
-        full_audio_blank = torch.zeros((1, int(video_length * source_sample_rate)))
-
-        for i, line in df.iterrows():
-            audio, sr = torchaudio.load(line.styled_generated_path)
-
-            start = line.start
-                    
-            audio = time_stretch(audio.squeeze().numpy(), sr, rate=line.speed_rate)
-            audio = torch.tensor(audio).unsqueeze(0)
-
-            start_pos = int(start*source_sample_rate)
-            end_pos = int(start_pos + audio.shape[-1])
-            
-            full_audio_blank[0, int(start_pos): int(end_pos)] = audio[0]
-        return full_audio_blank
-
-    def merge_timestamps_stretch_whole(self, df):
-        previous_pause = torch.zeros((1, int(df.iloc[0].start * self.sample_rate)))
-        audio_first, sr = torchaudio.load(df.iloc[0].styled_generated_path)
-        pause = torch.zeros((1, int(df.iloc[0].pause * self.sample_rate)))
-
-        audio_first = torch.cat((previous_pause, audio_first, pause), dim=1)
-
-        for i, line in df.iterrows():
-            audio, sr = torchaudio.load(line.styled_generated_path)
-            pause = torch.zeros((1, int(line.pause * self.sample_rate)))
-
-            if i == 0:
-                continue
-
-            audio_first = torch.cat((audio_first, audio), dim=1)
-            audio_first = torch.cat((audio_first, pause), dim=1)
-        # add end pause
-        return audio_first

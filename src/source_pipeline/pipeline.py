@@ -57,6 +57,7 @@ class PipelineVideoTranslate:
             ffmpeg
             .input(video_fname)
             .output(out_path)
+            .global_args('-hide_banner')
             .run(overwrite_output=True)
         )
         return out_path, video_fname_wo_ext
@@ -188,7 +189,10 @@ class PipelineVideoTranslate:
         video_id = input_video_name.rsplit('/', maxsplit=1)[-1].split('.')[0]
         audio = ffmpeg.input(generated_full_audio).audio
         video = ffmpeg.input(input_video_name).video
-        out = ffmpeg.output(audio, video, os.path.join(translated_video_folder, f'{video_id}.mp4'), acodec='aac').run()
+        out = ffmpeg.output(
+            audio, video, os.path.join(translated_video_folder, f'{video_id}.mp4'),
+            acodec='aac'
+        ).global_args('-hide_banner').run()
         return f'translated_videos/{video_id}.mp4'
     
     def run_pipeline(self):

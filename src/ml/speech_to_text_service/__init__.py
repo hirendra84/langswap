@@ -1,7 +1,6 @@
-import pandas as pd
-
-import spacy
-
+import os
+import json
+from typing import List, Dict
 from logging import getLogger
 
 from src.ml.api_client import APIClient
@@ -10,8 +9,7 @@ from src.ml.ffmpeg import FFmpegClient
 from src.file_repository import FileRepository
 from src.pipeline_models.models import RemoteFile
 from src.pipeline_models.models import TextedSegment, VideoTranslation
-from src.ml.speech_to_text_service import asr_client
-from src.ml.speech_to_text_service.asr_client import ASRClient
+from src.ml.speech_to_text_service.asr_client import ASRClient, ASRX
 from src.ml.speech_to_text_service.vad_client import VadClient
 from src.ml.text_to_speech_service.demucs_client import DemucsClient
 
@@ -25,16 +23,19 @@ class SpeechToTextManager:
     _api_client: APIClient
     _file_repository: FileRepository
     sample_rate: int = 16_000
+    lang: str
 
-    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository):
+    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository, device, logger):
         self.public_id = public_id
-        self._asr_client = ASRClient("PMKV2A3076HULPET7XZSF7IITZP5H8SWICSCFI3L")
+        self._asr_client = ASRX(device=device)
         self._api_client = api_client
         self._file_repository = file_repository
 
-    def _resample_audio(self, audio_file: RemoteFile) -> RemoteFile:
+        self.logger = logger
 
-        # resampled_audio_path = os.path.join(self.directory, )
+        self.audio_extensions = ["mp3", "wav", "MP3"]
+
+    def _resample_audio(self, audio_file: RemoteFile) -> RemoteFile:
         resampled_audio_file = self._file_repository.get_file(f'{audio_file.name}_resampled_{self.sample_rate}')
         (FFmpegClient()
          .resample_audio(audio_file.file_path,
@@ -48,38 +49,91 @@ class SpeechToTextManager:
             self.sample_rate)
         return vad_filtered_audio_file
 
-    def extract_and_transcribe(self, video_translation: VideoTranslation) -> VideoTranslation:
+    def extract_and_transcribe(self, video_translation: VideoTranslation, num_speakers: int = None, lang: str = None) -> VideoTranslation:
+        if num_speakers is not None:
+            num_speakers = int(num_speakers)
+        # video_name = self._file_repository.materialize_file(video_translation.source_file)
+        base, extension = os.path.splitext(video_translation.source_file.file_path)
 
-        video_name = self._file_repository.materialize_file(video_translation.source_file)
-
-        audio_file = self._extract_audio(video_name.file_path)
-        audio_file = self._file_repository.save_file(audio_file)
+        if extension in self.audio_extensions:
+            audio_file = video_translation.source_file.file_path
+        else:
+            audio_file = self._extract_audio(video_translation.source_file.file_path)
+            audio_file = self._file_repository.save_file(audio_file)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,
                                       progress=10,
                                       status=ProcessStatus.in_progress)
         
+        self.logger.file_logger.info('Step: Demucs separation')
         background_paths = DemucsClient().separate(audio_file.file_path, self._file_repository.subdir('background_files'))
 
-        background_files = {name: self._file_repository.save_file(
-            RemoteFile(name=name,
-                       file_path=path),
-            force=True
-        ) for path, name in background_paths}
+        # background_files = {name: self._file_repository.save_file(
+        #     RemoteFile(name=name,
+        #                file_path=path),
+        #     force=True
+        # ) for path, name in background_paths}
 
-        # transcribe only according to the vocals
+        background_files = {
+            name: path for path, name in background_paths
+        }
+
+        self.logger.file_logger.info(f'Step: Transcribing')
         vocal_file = background_files["vocals.wav"]
-        transcription = self._asr_client.transcribe(vocal_file.s3_url)
+        source_lang_code = None
+        # transcribe
+        file_name = "raw_transcribed_info.json"
+        log_text = os.path.join(self._file_repository.directory, file_name)
+        lang_file_name = "lang_detect_info.json"
+        log_lang = os.path.join(self._file_repository.directory, lang_file_name)
+        if os.path.exists(log_text) and os.path.exists(log_lang):
+            self.logger.file_logger.info(f'Getting info from transcribed samples')
+            with open(log_text, encoding="utf-8") as f:
+                json_segments = json.load(f)
+                
+                detect_lang = json.load(open(log_lang, encoding="utf-8"))
+                source_lang_code = detect_lang["detected_language"]
+        else:
+            self.logger.file_logger.info(f'Loading the model on the disk')
+            with self._asr_client as asr_client:
+                #asr_client.load_models()
+                transcription = self._asr_client.transcribe(vocal_file, num_speakers=num_speakers, lang=lang)
+                source_lang_code = transcription.detected_language
+                json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
+                detect_lang = {"detected_language": source_lang_code}
+                self.logger.log_json(file_name=lang_file_name, data=detect_lang)
+                self.logger.log_json(file_name=file_name, data=json_segments)
 
         self._api_client.update_video(self.public_id,
                                       video_translation,
                                       progress=30,
                                       status=ProcessStatus.in_progress)
 
-        segments = self._remap_sentences(transcription.word_timestamps)
+        # split in sentences for pauses     
+        file_name = "splitted_sentences_pauses.json"
+        log_text = os.path.join(self._file_repository.directory, file_name)
+        if os.path.exists(log_text):
+            self.logger.file_logger.info(f'Getting info from already splitted samples')
+            with open(log_text, encoding="utf-8") as f:
+                json_segments = json.load(f)
+            
+            segments = []
+
+            for seg in json_segments:
+                segments.append(TextedSegment(
+                    text=seg['text'],
+                    start=seg['start'],
+                    end=seg['end'],
+                    speaker=seg['speaker'])
+                )
+        else:
+            segments = self._remap_pauses(json_segments)
+            json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in segments]
+            self.logger.log_json(file_name=file_name, data=json_segments)
 
         return VideoTranslation(
+            source_lang_code=source_lang_code,
             public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=audio_file,
@@ -91,7 +145,7 @@ class SpeechToTextManager:
     def _download_video(self, file: RemoteFile):
         return self._file_repository.materialize_file(file)
 
-    def _extract_audio(self, video_file_path, audio_file_name='extracted_audio') -> RemoteFile:
+    def _extract_audio(self, video_file_path, audio_file_name='extracted_audio.wav') -> RemoteFile:
         ffmpeg_client = FFmpegClient()
         output_file = self._file_repository.get_file(audio_file_name)
         out, err = ffmpeg_client.extract_audio(video_file_path,
@@ -102,56 +156,62 @@ class SpeechToTextManager:
 
         return output_file
 
-    def _remap_sentences(self, transcription: list[asr_client.WordTimestamp]) -> list[TextedSegment]:
-        # TODO: can be removed 
-        def load_spacy_model(language='xx') -> spacy.Language:
-            spacy_languages = {
-                'en': "en_core_web_sm",
-                'ru': "ru_core_news_sm",
-                'fr': "fr_core_news_sm",
-                'zh': "zh_core_web_sm",
-                "de": "de_core_news_sm",
-                "nl": "nl_core_news_sm",
-                "pl": "pl_core_news_sm",
-                "xx": "xx_sent_ud_sm"  # multilingual model
-            }
-            selected_model = spacy_languages[language]
-            try:
-                nlp_ = spacy.load(selected_model)
-            except OSError:
-                spacy.cli.download(selected_model)
-                nlp_ = spacy.load(selected_model)
-            return nlp_
+    def _remap_pauses(self, entries: List[Dict], pause_threshold=0.9, max_length=5, min_length=3): 
+        # algorithm to merge sentences according to the threshold
+        pairs = []
+        prev_end = entries[0]['end']
+        start_idx = entries[0]['start']
+        cur_pair = [entries[0]]
+        cur_speaker = entries[0]['speaker']
+        check_is_text = lambda x: len([i for i in x if i.isalpha()]) > 0
 
-        nlp = load_spacy_model()
-        plain_text = ' '.join(t.word for t in transcription)
-        doc = nlp(plain_text)
+        for cur_sample in entries[1:]:
+            if not check_is_text(cur_sample['text']):
+                continue
+            conditions = [
+                # pause is long enough and we have collected more than five seconds 
+                # change for ElevenLabs that does not condition on one audio sample
+                # ((cur_sample['start'] - prev_end) >= pause_threshold and (prev_end - start_idx >= min_length)),
+                # (cur_sample['start'] - prev_end) >= pause_threshold,
+                # we have collected max length of audio 
+                (prev_end - start_idx > max_length),
+                
+                # speaker changed
+                cur_speaker != cur_sample['speaker'],
+                # not (prev_end - start_idx < 0.6)
+                ]
+            # print(f"what conditions are fullfilled {conditions}")
+            # если пауза достаточно длинная и при этом мы собрали уже около 5 секунд или уже собрали больше 15 секунд
+            if any(conditions):
+                pairs.append(
+                    TextedSegment(
+                    text=" ".join([s['text'] for s in cur_pair]),
+                    start=start_idx,
+                    end=prev_end,
+                    speaker=cur_speaker
+                    )
+                )               
+                cur_pair = [cur_sample]
+                prev_end = cur_sample['end']
+                start_idx = cur_sample['start']
+                
+                cur_speaker = cur_sample['speaker']
+            else:
+                cur_pair.append(cur_sample)       
+                prev_end = cur_sample['end']
 
-        sent_bounds = [s[0].idx for s in doc.sents]
-
-        transcription_dict = [{
-            'word': t.word,
-            'start': t.start,
-            'end': t.end,
-        } for t in transcription]
-        df_words = pd.DataFrame(transcription_dict)
-
-        df_words['text'] = df_words.word
-        df_words['len'] = df_words.text.apply(len)
-        df_words['end_pos'] = (df_words['len'] + 1).cumsum()
-        df_words['start_pos'] = df_words['end_pos'].shift(1, fill_value=0)
-
-        for i, x in enumerate(sent_bounds):
-            df_words.loc[df_words['end_pos'] > x, 'sent'] = i
-
-        df_words.sent = df_words.sent.astype(int)
-        sentences = []
-        for i in df_words.sent.unique():
-            slc = df_words.loc[df_words.sent == i]
-            entry = TextedSegment(
-                text=' '.join(slc.text.to_list()),
-                start=slc.start.min(),
-                end=slc.end.max(),
-            )
-            sentences.append(entry)
-        return sentences
+        if cur_pair:
+            pairs.append(
+                    TextedSegment(
+                    text=" ".join([s['text'] for s in cur_pair]),
+                    start=start_idx,
+                    end=prev_end,
+                    speaker=cur_speaker
+                    )
+                )   
+        # last sample use case - sometimes it is too short and should be better merged with a previous one
+        last_sample = pairs[-1]
+        if last_sample.end - last_sample.start < 3 and len(pairs) > 1:
+            pairs[-2].text = pairs[-2].text + " " + last_sample.text
+            pairs[-2].end = last_sample.end
+        return pairs 

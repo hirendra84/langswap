@@ -1,15 +1,19 @@
 import io
 from abc import ABC
+from dotenv import load_dotenv
 
 import boto3
 import requests
 import os.path
-
+import urllib.request
+import requests
 from src.pipeline_models.models import RemoteFile
 from src.settings import LOCAL_DEBUG
 
+import os
 
-BUCKET = 'ds-dev-video-storage'
+load_dotenv()
+BUCKET = os.getenv('BUCKET', 'debug-bucket-langswap-bucket')
 
 
 class FileRepository(ABC):
@@ -67,7 +71,7 @@ class RemoteFileRepository(FileRepository):
         with requests.get(file.s3_url, stream=True) as response:
             response.raise_for_status()
             with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=self._download_chunk_size):
+                for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
         remote_file = RemoteFile(
             name=file.name,
@@ -91,6 +95,7 @@ class RemoteFileRepository(FileRepository):
         return remote_file
 
     def save_file(self, file: RemoteFile, force: bool = False):
+        print(f"bucket: {BUCKET}, file: {file.file_path}")
         if file.s3_url and not force:
             return file
 
@@ -108,6 +113,7 @@ class RemoteFileRepository(FileRepository):
         return file
 
     def save_file_from_stream(self, file: RemoteFile, stream: io.BytesIO):
+        print(f"BUCKET: {BUCKET}")
         self._s3_client.upload_fileobj(stream, BUCKET, file.name)
         s3_url = self._s3_client.generate_presigned_url(
             ClientMethod='get_object',
@@ -153,12 +159,32 @@ class LocalFileRepository(FileRepository):
             return self._cached_files[file.name]
 
         file_path = os.path.join(self._directory, file.name)
+        print(file_path)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'} 
         if not os.path.exists(file_path):
-            with requests.get(file.s3_url, stream=True) as response:
-                response.raise_for_status()
-                with open(file_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=self._download_chunk_size):
-                        f.write(chunk)
+            last_error = None
+            for i in range(5):
+                try:
+                    with urllib.request.urlopen(file.s3_url) as response:
+                        status_code = response.getcode()
+                        # Print the status code
+                        print('Status Code:', status_code) 
+                        with open(file_path, 'wb') as f:
+                            while True:
+                                chunk = response.read(1024)
+                                if chunk:
+                                    f.write(chunk)
+                                else:
+                                    break
+                    break
+                except Exception as e:
+                    print(e)
+                    last_error = e
+                    import time
+                    time.sleep(5)
+
+            if last_error is not None:
+                raise last_error
         remote_file = RemoteFile(
             name=file.name,
             file_path=file_path,
@@ -192,7 +218,7 @@ class LocalFileRepository(FileRepository):
                     'Bucket': BUCKET,
                     'Key': file.file_path
                 },
-                ExpiresIn=60 * 60 * 48  # 48 hours
+                ExpiresIn=60 * 60 * 14  # 14 days
             )
         file.s3_url = s3_url
         return file

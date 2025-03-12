@@ -1,14 +1,10 @@
-#!/bin/sh
-set -eu
+#!/bin/bash
+set -e
 
-echo "Waiting for postgres..."
-
-while ! nc -z $POSTGRES_HOST 5432; do
-  sleep 0.1
-done
-
-echo "PostgreSQL started"
-
-poetry run alembic upgrade head
-
-exec poetry run "$@"
+if [ "$1" = "demo" ]; then
+    python3 gradio_demo.py
+elif [ "$1" = "bash" ]; then
+    exec /bin/bash
+else
+    exec "$@"
+fi

@@ -10,7 +10,7 @@ DEBUG=False
 LOCAL_DEBUG = False or os.environ.get('LOCAL_DEBUG')
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000')
 BASE_WORKING_DIR = os.environ.get('BASE_WORKING_DIR', '/Users/nikolaypakhtusov/data')
-
+OPENVOICE_CONF_DIR = os.environ.get('OPENVOICE_CONF_DIR', './openvoice_conf')
 POSTGRES_HOST = os.environ.get('POSTGRES_HOST', '127.0.0.1')
 PG_PORT = os.environ.get('PG_PORT', 5432)
 POSTGRES_USER = os.environ.get('POSTGRES_USER', 'joint_user')
