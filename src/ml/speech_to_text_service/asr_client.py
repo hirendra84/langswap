@@ -1,6 +1,9 @@
 import cattrs
-
+import logging
 import sys
+import os
+from dotenv import load_dotenv
+from pathlib import Path
 
 sys.path.append("/app")
 sys.path.append("/app/whisperX")
@@ -9,10 +12,12 @@ sys.path.append("/app/src")
 from whisperX import whisperx
 import attr
 import torch
-import os
 import requests
 from time import sleep
 from src.utils.ml_processing.lang2code_mapper import map_language_to_code
+
+# Load environment variables from .env file
+load_dotenv()
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -102,20 +107,37 @@ class ASRClient:
 
 class ASRX:
 
-    token: str
-
     def __init__(self, device) -> None:
-        model_path = (
-            "./models_weights/whisper-large-v2/f0fe81560cb8b68660e564f55dd99207059c092e"
-        )
-        self.model_path_whisper = os.path.abspath(model_path)
+        # Get the project root directory (3 levels up from current file)
+        # This assumes the file is at src/ml/speech_to_text_service/asr_client.py
+        current_file_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        project_root = current_file_dir.parents[2]  # Go up 3 levels to reach project root
+        
+        # Define base directory for models relative to project root
+        models_base_dir = project_root / "models_weights"
+        
+        # Whisper model path
+        whisper_model_dir = models_base_dir / "whisper-large-v2" / "f0fe81560cb8b68660e564f55dd99207059c092e"
+        self.model_path_whisper = str(whisper_model_dir.resolve())
 
         self.model = None
         self.diarize_model = None
 
-        self.token = "***REDACTED-HF-TOKEN***"  # secret, move somewhere
-        model_path_diarization = "./models_weights/pyannote/models--pyannote--speaker-diarization-3.1/snapshots/84fd25912480287da0247647c3d2b4853cb3ee5d/config.yaml"
-        self.model_path_diarization = os.path.abspath(model_path_diarization)
+        # Load Hugging Face token from environment variable
+        # self.token = os.environ.get("HF_TOKEN")
+        # if not self.token:
+        #      ValueError("HF_TOKEN environment variable not set")
+        
+        # Diarization model path
+        diarize_model_dir = models_base_dir / "pyannote" / "models--pyannote--speaker-diarization-3.1" / "snapshots" / "84fd25912480287da0247647c3d2b4853cb3ee5d" / "config.yaml"
+        self.model_path_diarization = str(diarize_model_dir.resolve())
+        
+        # Verify model paths exist
+        if not os.path.exists(self.model_path_whisper):
+            raise FileNotFoundError(f"Whisper model not found at: {self.model_path_whisper}")
+        
+        if not os.path.exists(self.model_path_diarization):
+            raise FileNotFoundError(f"Diarization model not found at: {self.model_path_diarization}")
 
         self.device = device
     
