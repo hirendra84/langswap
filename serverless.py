@@ -66,8 +66,8 @@ def get_file(repo, s3_url):
     remote_file = repo.materialize_file(remote_file)
     return remote_file.file_path
 
-def handler(event):
-    input = event['input']
+def handler(job):
+    input = job['input']
     
     source_language = input.get('source_language', None)
     target_language = input.get('target_language', "english")
@@ -79,6 +79,9 @@ def handler(event):
     public_id = input.get('public_id', "public_id")
     s3_video_url = input.get("s3_video_url")
     watermark = input.get("watermark", True)
+
+    # First progress update - Initialization
+    runpod.serverless.progress_update(job, "0% Initializing translation pipeline")
 
     s3_client = init_s3_client()
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
@@ -98,7 +101,25 @@ def handler(event):
     
     pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
     
-    video_translation = pipeline.translate_video()
+    # Create a wrapped version of the pipeline that adds progress updates
+    # Second progress update - Transcription
+    runpod.serverless.progress_update(job, "20% Starting transcription (Speech-to-Text)")
+    pipeline._generate_asr()
+    
+    # Third progress update - Translation
+    runpod.serverless.progress_update(job, "40% Starting translation")
+    pipeline._generate_translation()
+    
+    # Fourth progress update - Text-to-Speech
+    runpod.serverless.progress_update(job, "60% Starting Text-to-Speech synthesis")
+    pipeline._generate_speech()
+    
+    # Fifth progress update - Audio separation and merging
+    runpod.serverless.progress_update(job, "80% Starting audio separation and enhancement")
+    video_translation = pipeline._merge(pipeline.config.dubbing_algo)
+    
+    # Final progress update
+    runpod.serverless.progress_update(job, "100% Translation pipeline completed successfully")
     
     result_video = video_translation.processed_video
     
