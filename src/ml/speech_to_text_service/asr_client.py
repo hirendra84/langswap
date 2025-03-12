@@ -123,11 +123,6 @@ class ASRX:
         self.model = None
         self.diarize_model = None
 
-        # Load Hugging Face token from environment variable
-        # self.token = os.environ.get("HF_TOKEN")
-        # if not self.token:
-        #      ValueError("HF_TOKEN environment variable not set")
-        
         # Diarization model path
         diarize_model_dir = models_base_dir / "pyannote" / "models--pyannote--speaker-diarization-3.1" / "snapshots" / "84fd25912480287da0247647c3d2b4853cb3ee5d" / "config.yaml"
         self.model_path_diarization = str(diarize_model_dir.resolve())
