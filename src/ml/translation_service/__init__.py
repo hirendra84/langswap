@@ -7,7 +7,7 @@ from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 from src.file_repository import FileRepository
 
-from src.ml.translation_service.translator_client import TranslatorClient, HugTranslationClient, DeepLClient
+from src.ml.translation_service.translator_client import TranslatorClient, HugTranslationClient, DeepLClient, GemmaTranslationClient
 
 
 logger = getLogger(__name__)
@@ -27,8 +27,8 @@ class TranslationManager:
 
         self.device = device
         self.logger = logger
-        self._translator_client = HugTranslationClient(self.device)
-        # self._translator_client = DeepLClient(key="1a9bfdf3-17d8-4ffa-bc00-54e4249506cd:fx")
+        #self._translator_client = HugTranslationClient(self.device)
+        self._translator_client = GemmaTranslationClient(self.device)
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts
