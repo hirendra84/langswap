@@ -27,14 +27,15 @@ class FlowClient:
         self,
         config_path="/app/F5-TTS/inference-cli.toml",
         vocab_file='/app/F5-TTS/data/Emilia_ZH_EN_pinyin/vocab.txt',
-        vocos_local_path: str = "/app/vocos-mel-24khz",
+        vocos_local_path: str = "./models_weights/vocos-mel-24khz",
     ):
         # TODO: change all the paths to relative
         self.config = tomli.load(open(config_path, "rb"))
         self.vocab_file = vocab_file
 
         # where do we use vocos?
-        vocos = load_vocoder(is_local=True, local_path=vocos_local_path)
+        self.vocos = load_vocoder(is_local=True, local_path=vocos_local_path)
+        
         self.tts = self.load_tts_flow()
 
         self.ref_audio = "/app/F5-TTS/test_en_1_ref_short.wav"
