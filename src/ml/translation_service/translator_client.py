@@ -44,7 +44,7 @@ class GemmaTranslationClient(TranslatorClient):
                 "content":  [
                     {
                         "type": "text", 
-                        "text": "You are a translation assistant. Your task is to translate the text provided in the user's input from the source language to the target language, using context. You will respond only with the translation of the text in the target language."
+                        "text": "You are a translation assistant. Your task is to translate the text provided in the user's input (can contain syntax and semantic error, need fix them) from the source language to the target language, using context. You will respond only with the translation of the text in the target language."
                     }
                 ]
             },
