@@ -7,7 +7,7 @@ from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 from src.file_repository import FileRepository
 
-from src.ml.translation_service.translator_client import TranslatorClient, HugTranslationClient, DeepLClient, GemmaTranslationClient
+from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient
 
 
 logger = getLogger(__name__)
@@ -27,12 +27,12 @@ class TranslationManager:
 
         self.device = device
         self.logger = logger
-        #self._translator_client = HugTranslationClient(self.device)
         self._translator_client = GemmaTranslationClient(self.device)
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts
         sentences_texts = [s.text for s in segments]
+        context = ''.join([f"speaker: {s.speaker}:\n {s.text}\n" for s in segments])
         video_translation
         self.logger.file_logger.info(f'Step: Translate the segments')
 
@@ -57,9 +57,10 @@ class TranslationManager:
                             )
         else:
             self._translator_client.load_models()
-            translations = self._translator_client.translate(sentences_texts,
+            translations = self._translator_client.translate(sentences=sentences_texts,
                                                          source_lang=source_lang,
-                                                         target_lang=target_lang)
+                                                         target_lang=target_lang,
+                                                         context=context)
 
             translated_segments = []
             for s, t in zip(segments, translations):
