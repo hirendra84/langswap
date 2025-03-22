@@ -21,3 +21,5 @@ coverage.xml
 .hypothesis
 .gitlab-ci.yml
 .gitlab/**
+check_chenger_pipeline.ipynb
+check_generation.ipynb

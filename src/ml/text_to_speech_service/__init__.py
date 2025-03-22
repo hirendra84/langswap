@@ -29,8 +29,14 @@ class TextToSpeechManager:
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
-    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository,
-                tts_sample_rate: int, logger, device="cuda", tts_name="xtts", eleven_api_token=""):
+    def __init__(self, 
+                public_id: str, 
+                api_client: APIClient,
+                file_repository: FileRepository,
+                tts_sample_rate: int, 
+                logger, device="cuda", 
+                tts_name="xtts", 
+                eleven_api_token=""):
         self.public_id = public_id
         self._api_client = api_client
         self._file_repository = file_repository
@@ -60,8 +66,7 @@ class TextToSpeechManager:
         file_path = os.path.join(generated_audio_folder, f"{segment.start}_{segment.end}.wav")
         language = map_language_to_code(target_lang, "whisper")
         
-        with self._tts_client as tts_client:
-            tts_client.generate_audio(
+        self._tts_client.generate_audio(
             segment.translation, segment.source_file, file_path, language
         )
         segment.generated_file = file_path
@@ -120,13 +125,13 @@ class TextToSpeechManager:
             enhanced_audio_folder = self._file_repository.subdir("enhanced_audio")
             video_translation = db_manager.enhance_pipeline(video_translation, enhanced_audio_folder)
         
-        with self._tts_client as tts_client:
-            self.logger.file_logger.info("Step: text to speech basic pipeline")
-            generated_audio_folder = self._file_repository.subdir("generated_audio")
-            video_translation = tts_client.tts_pipeline(
-                        video_translation,
-                        generated_audio_folder,
-                        language=target_lang)
+
+        self.logger.file_logger.info("Step: text to speech basic pipeline")
+        generated_audio_folder = self._file_repository.subdir("generated_audio")
+        video_translation = self._tts_client.tts_pipeline(
+                    video_translation,
+                    generated_audio_folder,
+                    language=target_lang)
         
         if voice_conv:
             self.logger.file_logger.info("Step: voice cloning pipeline")

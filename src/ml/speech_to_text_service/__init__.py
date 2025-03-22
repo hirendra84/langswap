@@ -98,7 +98,7 @@ class SpeechToTextManager:
             self.logger.file_logger.info(f'Loading the model on the disk')
             with self._asr_client as asr_client:
                 #asr_client.load_models()
-                transcription = self._asr_client.transcribe(vocal_file, num_speakers=num_speakers, lang=lang)
+                transcription = asr_client.transcribe(vocal_file, num_speakers=num_speakers, lang=lang)
                 source_lang_code = transcription.detected_language
                 json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in transcription.segments]
                 detect_lang = {"detected_language": source_lang_code}

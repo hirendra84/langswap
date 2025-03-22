@@ -23,7 +23,21 @@ from model.utils import (
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
-vocos = Vocos.from_pretrained("charactr/vocos-mel-24khz")
+
+# load vocoder
+def load_vocoder(is_local=False, local_path="", device=device):
+    if is_local:
+        print(f"Load vocos from local path {local_path}")
+        vocos = Vocos.from_hparams(f"{local_path}/config.yaml")
+        state_dict = torch.load(f"{local_path}/pytorch_model.bin", map_location=device)
+        vocos.load_state_dict(state_dict)
+        vocos.eval()
+    else:
+        print("Download Vocos from huggingface charactr/vocos-mel-24khz")
+        vocos = Vocos.from_pretrained("charactr/vocos-mel-24khz")
+    return vocos
+
+vocos = load_vocoder(is_local=True, local_path="./models_weights/vocos-mel-24khz")
 
 
 # -----------------------------------------
@@ -76,18 +90,7 @@ def chunk_text(text, max_chars=135):
     return chunks
 
 
-# load vocoder
-def load_vocoder(is_local=False, local_path="", device=device):
-    if is_local:
-        print(f"Load vocos from local path {local_path}")
-        vocos = Vocos.from_hparams(f"{local_path}/config.yaml")
-        state_dict = torch.load(f"{local_path}/pytorch_model.bin", map_location=device)
-        vocos.load_state_dict(state_dict)
-        vocos.eval()
-    else:
-        print("Download Vocos from huggingface charactr/vocos-mel-24khz")
-        vocos = Vocos.from_pretrained("charactr/vocos-mel-24khz")
-    return vocos
+
 
 
 # load asr pipeline

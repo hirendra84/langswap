@@ -1,4 +1,5 @@
 from itertools import tee
+import uuid
 from dotenv import load_dotenv
 import runpod
 import time
@@ -66,19 +67,29 @@ def get_file(repo, s3_url):
     remote_file = repo.materialize_file(remote_file)
     return remote_file.file_path
 
-def handler(event):
-    input = event['input']
+def handler(job):
+    input = job['input']
     
     source_language = input.get('source_language', None)
     target_language = input.get('target_language', "english")
-    tts_engine = input.get("tts_engine", "xtts")
+    tts_engine = input.get("tts_engine", "xtts") # xtts, f5tts, elevenlabs
     token = input.get("token", None)
             
     num_speakers = input.get('count_speakers', None)
-    name = input.get('name', "video_translation")
-    public_id = input.get('public_id', "public_id")
+    random_id = str(uuid.uuid4())
+    name = input.get('name', random_id)
+    public_id = input.get('public_id', random_id)
     s3_video_url = input.get("s3_video_url")
     watermark = input.get("watermark", True)
+    show_progress = input.get("show_progress", False)
+
+    # Helper function for progress updates
+    def update_progress(message):
+        if show_progress:
+            runpod.serverless.progress_update(job, message)
+    
+    # First progress update - Initialization
+    update_progress("0% Initializing translation pipeline")
 
     s3_client = init_s3_client()
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
@@ -98,42 +109,37 @@ def handler(event):
     
     pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
     
-    video_translation = pipeline.translate_video()
+    # Second progress update - Transcription
+    update_progress("20% Starting transcription (Speech-to-Text)")
+    pipeline._generate_asr()
+    
+    # Third progress update - Translation
+    update_progress("40% Starting translation")
+    pipeline._generate_translation()
+    
+    # Fourth progress update - Text-to-Speech
+    update_progress("60% Starting Text-to-Speech synthesis")
+    pipeline._generate_speech()
+    
+    # Fifth progress update - Audio separation and merging
+    update_progress("80% Starting audio separation and enhancement")
+    video_translation = pipeline._merge(pipeline.config.dubbing_algo)
+    
+    # Generate SRT files - updated to use the method from the pipeline
+    update_progress("95% Generating subtitle files")
+    source_srt, translated_srt = pipeline.generate_srt_files()
+    
+    # Final progress update
+    update_progress("100% Translation pipeline completed successfully")
     
     result_video = video_translation.processed_video
     
-    return {'s3_result_video_url': f'{result_video.s3_url}'}
-
-def test_video_translation_local():
-    """
-    This function builds a sample event and calls the handler.
-    Adjust the values for testing based on your environment.
-    """
-    test_event = {
-        "input": {
-          #  "source_language": "russian",          # change as needed
-            "target_language": "spanish",           # change as needed
-            "tts_engine": "f5tts",                   # change as needed
-            "token": "your_eleven_api_token",       # provide a valid token if required
-      #      "count_speakers": 1,
-            "name": "local_test_video_translation",
-            "public_id": "local_test_id",
-            "s3_video_url": "https://url_on_your_video_on_s3",  # provide a valid S3 URL
-            "watermark": True   
-        }
+    # Return URLs for both the video and the SRT files
+    return {
+        's3_result_video_url': f'{result_video.s3_url}',
+        's3_source_transcript_url': f'{source_srt.s3_url}',
+        's3_translated_transcript_url': f'{translated_srt.s3_url}'
     }
-    try:
-        result = handler(test_event)
-        print("Translation Test Successful:")
-        print(result)
-    except Exception as e:
-        print("Translation Test Failed:")
-        print(e)
 
 if __name__ == '__main__':
-    # If a command-line argument 'test' is given, run the test function
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
-        print("Running local translation test...")
-        test_video_translation_local()
-    else:
-        runpod.serverless.start({'handler': handler})
+    runpod.serverless.start({'handler': handler})

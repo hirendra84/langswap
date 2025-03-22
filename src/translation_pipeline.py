@@ -53,12 +53,23 @@ class VideoTranslationPipeline:
 
     def _generate_translation(self):
         torch.cuda.empty_cache()
-        translate_manager = TranslationManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger)
+        translate_manager = TranslationManager(self.config.public_id, 
+                                               self._api_client, 
+                                               self._file_repository, 
+                                               device=self.config.device, 
+                                               logger=self.logger)
         self.video_translation = translate_manager.translate(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang)
         
     def _generate_speech(self):
         torch.cuda.empty_cache()
-        tts_manager = TextToSpeechManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger, tts_sample_rate=24000, eleven_api_token=self.config.eleven_api_token)
+        tts_manager = TextToSpeechManager(self.config.public_id, 
+                                          self._api_client, 
+                                          self._file_repository, 
+                                          device=self.config.device, 
+                                          tts_name = self.config.tts_model,
+                                          logger=self.logger, 
+                                          tts_sample_rate=24000, 
+                                          eleven_api_token=self.config.eleven_api_token)
         self.video_translation = tts_manager.synthesize(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang, voice_conv=self.config.voice_conv, enhance=True)
     
     def _merge(self, merge_pipeline="stretch_whole"):
@@ -145,6 +156,49 @@ class VideoTranslationPipeline:
         self.video_translation = self._merge(self.config.dubbing_algo)
         torch.cuda.empty_cache()
         return self.video_translation
+
+    def generate_srt_files(self):
+        """
+        Generate SRT files for both the original transcript and the translation.
+        Returns the RemoteFile objects for both files.
+        """
+        # Function to convert timestamp to SRT format (HH:MM:SS,mmm)
+        def format_time(seconds):
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            seconds = seconds % 60
+            milliseconds = int((seconds - int(seconds)) * 1000)
+            return f"{hours:02}:{minutes:02}:{int(seconds):02},{milliseconds:03}"
+        
+        # Generate SRT for original transcript
+        source_srt_content = ""
+        for i, segment in enumerate(self.video_translation.recognized_texts):
+            source_srt_content += f"{i+1}\n"
+            source_srt_content += f"{format_time(segment.start)} --> {format_time(segment.end)}\n"
+            source_srt_content += f"{segment.text}\n\n"
+        
+        # Generate SRT for translated transcript
+        translated_srt_content = ""
+        for i, segment in enumerate(self.video_translation.translated_texts):
+            translated_srt_content += f"{i+1}\n"
+            translated_srt_content += f"{format_time(segment.start)} --> {format_time(segment.end)}\n"
+            translated_srt_content += f"{segment.translation}\n\n"
+        
+        # Save source SRT file
+        source_srt_file = self._file_repository.get_file("source_transcript.srt")
+        with open(source_srt_file.file_path, 'w', encoding='utf-8') as f:
+            f.write(source_srt_content)
+        
+        # Save translated SRT file
+        translated_srt_file = self._file_repository.get_file("translated_transcript.srt")
+        with open(translated_srt_file.file_path, 'w', encoding='utf-8') as f:
+            f.write(translated_srt_content)
+        
+        # Upload the files to S3
+        source_srt_file = self._file_repository.save_file(source_srt_file)
+        translated_srt_file = self._file_repository.save_file(translated_srt_file)
+        
+        return source_srt_file, translated_srt_file
 
 
 class ChangeManager:
