@@ -27,6 +27,7 @@ class XTTSClient:
         self._file_repository = file_repository
 
         self.model = None
+        self.load_models()
 
     def load_models(self):
         self.model = TTS(model_path=self.tts_model_path, config_path=self.config_path).to(self.device)

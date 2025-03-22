@@ -55,7 +55,7 @@ class TranslationPipelineConfig:
     device: str = field(default="cuda")
     name: str = field(default="example")
     dubbing_algo: Literal["speedup", "pause_based", "stretch_whole"] = field(default="speedup")
-    tts_model: Literal["xtts", "f5tts", "elevenlabs"] = field(default="xtts")
+    tts_model: Literal["xtts", "f5tts", "elevenlabs"] = field(default=None)
     eleven_api_token: str = field(default=None)
     watermark: bool = field(default=False)
 

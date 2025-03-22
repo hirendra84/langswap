@@ -2,6 +2,7 @@ import cattrs
 import logging
 import sys
 import os
+import json
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -58,6 +59,7 @@ class ASRClient:
 
     def __init__(self, api_key: str):
         self.token = api_key
+        
 
     def transcribe(self, source_url: str, lang: str) -> Output:
         lang = map_language_to_code(lang, "whisper")
@@ -68,7 +70,7 @@ class ASRClient:
         }
 
         url = "https://api.runpod.ai/v2/faster-whisper/runsync"
-
+        
         payload = {
             "input": {
                 "audio": source_url,
@@ -146,10 +148,14 @@ class ASRX:
         self.diarize_model = None
 
     def load_models(self):
+        
         compute_type = "float32" if self.device == "cpu" else "float16"
 
         self.model = whisperx.load_model(
-            self.model_path_whisper, device=self.device, compute_type=compute_type, local_files_only=True
+            self.model_path_whisper, 
+            device=self.device, 
+            compute_type=compute_type, 
+            local_files_only=True
         )
 
         self.diarize_model = whisperx.DiarizationPipeline(
