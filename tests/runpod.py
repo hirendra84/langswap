@@ -5,6 +5,12 @@ import time
 from dotenv import load_dotenv
 import boto3
 from botocore.client import Config
+import argparse
+import sys
+
+# Import the local testing function from main.py
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from main import test_video_translation_local
 
 def load_environment():
     """Load environment variables from .env file"""
@@ -191,9 +197,85 @@ def wait_for_job_completion(submitted_jobs, runpod_api_key, check_interval=60, t
     # Return True if all jobs completed successfully
     return successful == len(submitted_jobs)
 
-if __name__ == "__main__":
-    submitted_jobs = run_translation_tests()
+def run_local_translation_tests():
+    """Run the translation tests locally without using RunPod"""
+    # Load environment variables
+    credentials = load_environment()
     
-    # Uncomment to wait for job completion
-    success = wait_for_job_completion(submitted_jobs, load_environment()['runpod_api_key'])
-    print(f"All tests passed: {success}")
+    # Create S3 client
+    s3_client = get_s3_client(credentials)
+    
+    # List all test videos
+    videos = list_test_videos(s3_client)
+    print(f"Found {len(videos)} test videos")
+    
+    # Process each video
+    results = []
+    for video_key in videos:
+        # Generate pre-signed URL
+        video_url = generate_presigned_url(s3_client, 'langswap-videos-dev', video_key)
+        print(f"Processing video locally: {video_key}")
+        
+        # Create a test input for the local translation pipeline
+        test_input = {
+            "input": {
+                "target_language": "russian",
+                "tts_engine": "xtts",
+                "watermark": True,
+                "name": f"test_{os.path.basename(video_key)}",
+                "public_id": f"test_local_{int(time.time())}",
+                "s3_video_url": video_url
+            }
+        }
+        
+        # Save the test input as a temporary file
+        temp_input_file = f"temp_input_{int(time.time())}.json"
+        with open(temp_input_file, "w") as f:
+            json.dump(test_input, f)
+        
+        try:
+            # Run the local translation test
+            print(f"Starting local translation for {video_key}")
+            test_video_translation_local(temp_input_file)
+            results.append({
+                'video_key': video_key,
+                'status': 'completed'
+            })
+        except Exception as e:
+            print(f"Error processing {video_key} locally: {str(e)}")
+            results.append({
+                'video_key': video_key,
+                'status': 'failed',
+                'error': str(e)
+            })
+        finally:
+            # Clean up the temporary file
+            if os.path.exists(temp_input_file):
+                os.remove(temp_input_file)
+    
+    # Summarize results
+    successful = sum(1 for job in results if job['status'] == 'completed')
+    failed = sum(1 for job in results if job['status'] == 'failed')
+    
+    print(f"\nLocal Translation Test Results:")
+    print(f"Total videos: {len(results)}")
+    print(f"Successful: {successful}")
+    print(f"Failed: {failed}")
+    
+    return results
+
+if __name__ == "__main__":
+    # Add command line arguments
+    parser = argparse.ArgumentParser(description='Run video translation tests')
+    parser.add_argument('--local', action='store_true', help='Run tests locally without RunPod')
+    args = parser.parse_args()
+    
+    if args.local:
+        print("Running local translation tests...")
+        results = run_local_translation_tests()
+    else:
+        print("Running RunPod translation tests...")
+        submitted_jobs = run_translation_tests()
+        # Wait for job completion
+        success = wait_for_job_completion(submitted_jobs, load_environment()['runpod_api_key'])
+        print(f"All tests passed: {success}")
