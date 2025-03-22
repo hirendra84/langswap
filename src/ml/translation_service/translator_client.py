@@ -71,8 +71,6 @@ class GemmaTranslationClient(TranslatorClient):
 
 
     def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: str) -> list[str]:
-        #print(context)
-        #print(sentences)
         translations = []
         for sentence in tqdm(sentences):
             translated_sent = self.translate_sent(sentence, input_lang=source_lang, output_lang=target_lang, context=context)
