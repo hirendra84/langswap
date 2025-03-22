@@ -2,6 +2,7 @@ import os
 import torch
 import torchaudio
 
+import src.model_config
 from src.ml.api_client import MockAPIClient
 from src.file_repository import LocalFileRepository
 from src.pipeline_models.enums import ProcessStatus
@@ -9,11 +10,9 @@ from src.pipeline_models.models import RemoteFile
 from src.pipeline_models.models import VideoTranslation
 from src.pipeline_models.models import TranslationPipelineConfig
 from src.pipeline_models.models import TraslationUpdate
-from src.settings import BASE_WORKING_DIR
 from src.ml.speech_to_text_service import SpeechToTextManager
 from src.ml.text_to_speech_service import TextToSpeechManager
 from src.ml.translation_service import TranslationManager
-from src.utils.s3_client import get_s3_client
 from src.utils.logging import Logger
 from src.ml.video_dubbing_manager import VideoDubbingManager
 from src.ml.text_to_speech_service.demucs_client import DemucsClient

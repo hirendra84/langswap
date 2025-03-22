@@ -8,6 +8,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
 from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 from typing import Tuple, List
+from src.model_config import MODEL_WEIGHTS_DIR
 
 class TranslatorClient(ABC):
 
@@ -32,9 +33,14 @@ class GemmaTranslationClient(TranslatorClient):
 
     def load_models(self):
         self.model = Gemma3ForConditionalGeneration.from_pretrained(
-            self.path_to_model, device_map=self.device
+            self.path_to_model,
+            device_map=self.device,
+            cache_dir=MODEL_WEIGHTS_DIR
         ).eval()      
-        self.processor = AutoProcessor.from_pretrained(self.path_to_model)
+        self.processor = AutoProcessor.from_pretrained(
+            self.path_to_model,
+            cache_dir=MODEL_WEIGHTS_DIR
+        )
 
     def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, temperature=0.75, top_p=1.0, top_k=0, max_new_tokens=1024) -> str:
         messages = [

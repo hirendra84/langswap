@@ -155,13 +155,17 @@ class ASRX:
             self.model_path_whisper, 
             device=self.device, 
             compute_type=compute_type, 
-            local_files_only=True
+            local_files_only=False
         )
 
         self.diarize_model = whisperx.DiarizationPipeline(
             self.model_path_diarization, device=self.device
         )
 
+
+    def get_cache_dir(self):
+        """Returns the models_weights directory path"""
+        return str(Path(self.model_path_whisper).parent.parent)  # Go up to models_weights
 
     def transcribe(self, source_file: str, lang=None, num_speakers=None) -> Output:
         language = None
@@ -174,8 +178,11 @@ class ASRX:
 
         language = response["language"]
         lang = language
+        
         model_a, metadata = whisperx.load_align_model(
-            language_code=response["language"], device=self.device
+            language_code=response["language"], 
+            device=self.device,
+            model_dir=self.get_cache_dir()
         )
 
         response = whisperx.align(
