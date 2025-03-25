@@ -37,6 +37,12 @@ python serverless.py
 
 This will run test_input.json as an input without need to deploy the service.
 
+```bash
+python tests/runpod.py --local
+```
+
+This command will run more comprehensive tests. It will go through every video in test_videos folder on S3.
+
 ### Deploying with Runpod
 
 The project is intended for serverless deployment on Runpod. To deploy:

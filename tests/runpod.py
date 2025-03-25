@@ -7,6 +7,8 @@ import boto3
 from botocore.client import Config
 import argparse
 import sys
+import logging
+from datetime import datetime
 
 # Import the local testing function from main.py
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -106,6 +108,42 @@ def check_job_status(job_id, runpod_api_key, endpoint_id='imukd6fpsg4hk4'):
         print(f"Error checking job status: {response.status_code} - {response.text}")
         return None
 
+def setup_video_logger(video_key):
+    """Create a logger that writes to a file named after the video being processed"""
+    # Extract the video filename without the path and extension
+    video_filename = os.path.basename(video_key).replace('.mp4', '')
+    
+    # Create logs directory if it doesn't exist
+    logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    # Create a log file with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(logs_dir, f"{video_filename}_{timestamp}.txt")
+    
+    # Configure logger
+    logger = logging.getLogger(video_filename)
+    logger.setLevel(logging.INFO)
+    
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    
+    # Create formatter and add it to the handler
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    
+    # Add handler to logger
+    logger.addHandler(file_handler)
+    
+    # Also log to console
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    logger.info(f"Starting log for video: {video_key}")
+    return logger
+
 def run_translation_tests():
     """Main function to run the translation tests"""
     # Load environment variables
@@ -123,9 +161,12 @@ def run_translation_tests():
     
     # Process each video
     for video_key in videos:
+        # Set up logging for this video
+        logger = setup_video_logger(video_key)
+        
         # Generate pre-signed URL
         video_url = generate_presigned_url(s3_client, 'langswap-videos-dev', video_key)
-        print(f"Processing video: {video_key}")
+        logger.info(f"Processing video: {video_key}")
         
         # Submit translation job
         job_response = submit_translation_job(video_url, credentials['runpod_api_key'])
@@ -135,11 +176,12 @@ def run_translation_tests():
             submitted_jobs.append({
                 'video_key': video_key,
                 'job_id': job_id,
-                'status': 'submitted'
+                'status': 'submitted',
+                'logger': logger
             })
-            print(f"Job submitted for {video_key} with ID: {job_id}")
+            logger.info(f"Job submitted with ID: {job_id}")
         else:
-            print(f"Failed to submit job for {video_key}")
+            logger.error(f"Failed to submit job")
     
     # Monitor job status (optional - can be expanded to wait for completion)
     print(f"\nSubmitted {len(submitted_jobs)} jobs for translation")
@@ -157,6 +199,7 @@ def wait_for_job_completion(submitted_jobs, runpod_api_key, check_interval=60, t
             if job['status'] in ['completed', 'failed']:
                 continue
                 
+            logger = job['logger']
             status_response = check_job_status(job['job_id'], runpod_api_key)
             
             if status_response:
@@ -166,13 +209,16 @@ def wait_for_job_completion(submitted_jobs, runpod_api_key, check_interval=60, t
                     job['status'] = 'completed'
                     job['result'] = status_response.get('output', {})
                     completed_jobs += 1
-                    print(f"Job {job['job_id']} for {job['video_key']} completed successfully")
+                    logger.info(f"Job {job['job_id']} completed successfully")
+                    logger.info(f"Output: {json.dumps(job['result'], indent=2)}")
                     
                 elif current_status in ['FAILED', 'CANCELLED']:
                     job['status'] = 'failed'
                     job['error'] = status_response.get('error', 'Unknown error')
                     completed_jobs += 1
-                    print(f"Job {job['job_id']} for {job['video_key']} failed: {job['error']}")
+                    logger.error(f"Job failed: {job['error']}")
+                else:
+                    logger.info(f"Current status: {current_status}")
         
         # If not all jobs completed, wait before checking again
         if completed_jobs < len(submitted_jobs):
@@ -212,9 +258,12 @@ def run_local_translation_tests():
     # Process each video
     results = []
     for video_key in videos:
+        # Set up logging for this video
+        logger = setup_video_logger(video_key)
+        
         # Generate pre-signed URL
         video_url = generate_presigned_url(s3_client, 'langswap-videos-dev', video_key)
-        print(f"Processing video locally: {video_key}")
+        logger.info(f"Processing video locally: {video_key}")
         
         # Create a test input for the local translation pipeline
         test_input = {
@@ -227,6 +276,7 @@ def run_local_translation_tests():
                 "s3_video_url": video_url
             }
         }
+        logger.info(f"Test input: {json.dumps(test_input, indent=2)}")
         
         # Save the test input as a temporary file
         temp_input_file = f"temp_input_{int(time.time())}.json"
@@ -235,14 +285,31 @@ def run_local_translation_tests():
         
         try:
             # Run the local translation test
-            print(f"Starting local translation for {video_key}")
-            test_video_translation_local(temp_input_file)
+            logger.info(f"Starting local translation")
+            
+            # Capture stdout/stderr for logging
+            import io
+            import sys
+            from contextlib import redirect_stdout, redirect_stderr
+            
+            stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
+            
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                test_video_translation_local(temp_input_file)
+            
+            # Log captured output
+            logger.info("Standard output:\n" + stdout_capture.getvalue())
+            if stderr_capture.getvalue():
+                logger.warning("Standard error:\n" + stderr_capture.getvalue())
+            
+            logger.info("Translation completed successfully")
             results.append({
                 'video_key': video_key,
                 'status': 'completed'
             })
         except Exception as e:
-            print(f"Error processing {video_key} locally: {str(e)}")
+            logger.error(f"Error processing: {str(e)}", exc_info=True)
             results.append({
                 'video_key': video_key,
                 'status': 'failed',
@@ -252,6 +319,7 @@ def run_local_translation_tests():
             # Clean up the temporary file
             if os.path.exists(temp_input_file):
                 os.remove(temp_input_file)
+                logger.info(f"Removed temporary input file: {temp_input_file}")
     
     # Summarize results
     successful = sum(1 for job in results if job['status'] == 'completed')

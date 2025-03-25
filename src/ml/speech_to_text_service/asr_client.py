@@ -137,6 +137,7 @@ class ASRX:
             raise FileNotFoundError(f"Diarization model not found at: {self.model_path_diarization}")
 
         self.device = device
+        self.load_models()
     
     
     def __enter__(self):
