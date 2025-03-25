@@ -3,9 +3,6 @@ import torch
 import torchaudio
 
 import src.model_config
-from src.ml.api_client import MockAPIClient
-from src.file_repository import LocalFileRepository
-from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models.models import RemoteFile
 from src.pipeline_models.models import VideoTranslation
 from src.pipeline_models.models import TranslationPipelineConfig
@@ -27,16 +24,12 @@ class VideoTranslationPipeline:
     def __init__(self, config: TranslationPipelineConfig, file_repository):
         self.config = config
 
-        self._api_client = MockAPIClient('dontcare')
-
         self._file_repository = file_repository
 
         file = RemoteFile(
             file_path=self.config.source_video_path,
             name=self.config.name
         )
-        #self.file = self._file_repository.save_file(file, force=False)
-
 
         self.logger = Logger(directory=self._file_repository.directory)
 
@@ -45,7 +38,7 @@ class VideoTranslationPipeline:
         self.audio_extensions = ["mp3", "wav"]
    
     def _generate_asr(self):
-        stt_manager = SpeechToTextManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger)
+        stt_manager = SpeechToTextManager(self.config.public_id, self._file_repository, device=self.config.device, logger=self.logger)
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers, lang=self.config.source_lang)
         if self.config.source_lang == None:
             self.config.source_lang = map_language_to_code(self.video_translation.source_lang_code, system="reverse_from_whisper")
@@ -53,7 +46,6 @@ class VideoTranslationPipeline:
     def _generate_translation(self):
         torch.cuda.empty_cache()
         translate_manager = TranslationManager(self.config.public_id, 
-                                               self._api_client, 
                                                self._file_repository, 
                                                device=self.config.device, 
                                                logger=self.logger)
@@ -62,7 +54,6 @@ class VideoTranslationPipeline:
     def _generate_speech(self):
         torch.cuda.empty_cache()
         tts_manager = TextToSpeechManager(self.config.public_id, 
-                                          self._api_client, 
                                           self._file_repository, 
                                           device=self.config.device, 
                                           tts_name = self.config.tts_model,
@@ -142,10 +133,6 @@ class VideoTranslationPipeline:
             processed_video=resulted_video
         )
 
-        self._api_client.update_video(new_video_translation.public_id,
-                                      new_video_translation,
-                                      progress=10,
-                                      status=ProcessStatus.done)
         return new_video_translation
     
     def translate_video(self):
@@ -219,7 +206,7 @@ class ChangeManager:
         json_segments = [{"translation": seg.translation, "text": seg.text} for seg in self.video_translation.translated_texts]
         self.video_translation_pipeline.logger.log_json(file_name="translations.json", data=json_segments)
         
-        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._api_client, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
+        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
         vocals_path = self.video_translation.background_audio["vocals.wav"]
         for update in updates:
             tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], target_lang=self.video_translation_pipeline.config.target_lang, vocals_path=vocals_path, voice_conv=self.video_translation_pipeline.config.voice_conv)

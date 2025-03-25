@@ -1,5 +1,6 @@
 import io
 from abc import ABC
+from syslog import LOG_DEBUG
 from dotenv import load_dotenv
 
 import boto3
@@ -8,7 +9,6 @@ import os.path
 import urllib.request
 import requests
 from src.pipeline_models.models import RemoteFile
-from src.settings import LOCAL_DEBUG
 
 import os
 
@@ -245,9 +245,3 @@ class LocalFileRepository(FileRepository):
         new_dir = os.path.join(self._directory, dir_name)
         os.makedirs(new_dir, exist_ok=True)
         return new_dir
-
-
-if LOCAL_DEBUG:
-    file_repo_klass = LocalFileRepository
-else:
-    file_repo_klass = RemoteFileRepository

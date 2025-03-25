@@ -1,3 +1,9 @@
+# Binaries
+*.pth
+*.th
+*.pt
+*.bin
+*.onnx
 data/
 app/
 model_weights/

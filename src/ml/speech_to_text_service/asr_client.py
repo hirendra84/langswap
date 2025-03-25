@@ -6,8 +6,6 @@ import json
 from dotenv import load_dotenv
 from pathlib import Path
 
-sys.path.append("/app")
-sys.path.append("/app/src")
 
 import whisperx
 import attr

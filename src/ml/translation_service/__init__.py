@@ -1,9 +1,6 @@
 from logging import getLogger
-import pandas as pd
 import os
 import json
-from src.ml.api_client import APIClient
-from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 from src.file_repository import FileRepository
 
@@ -17,12 +14,10 @@ class TranslationManager:
     public_id: str
 
     _translator_client: TranslatorClient
-    _api_client: APIClient
     _file_repository: FileRepository
 
-    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository, device: str, logger):
+    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger):
         self.public_id = public_id
-        self._api_client = api_client
         self._file_repository = file_repository
 
         self.device = device
@@ -88,8 +83,4 @@ class TranslationManager:
             translated_texts=translated_segments,
             processed_video=video_translation.processed_video,
         )
-        self._api_client.update_video(self.public_id,
-                                      new_video_translation,
-                                      progress=60,
-                                      status=ProcessStatus.translation_ready)
         return new_video_translation

@@ -387,6 +387,7 @@ websocket-client==1.8.0
 websockets==13.1
 Werkzeug==3.0.4
 whisper-timestamped==1.14.2
+whisperx==3.3.1
 widgetsnbextension==4.0.13
 wrapt==1.16.0
 x-transformers==1.43.5

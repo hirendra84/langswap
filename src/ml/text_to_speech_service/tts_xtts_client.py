@@ -2,7 +2,6 @@ import sys
 
 sys.path.append("/app/coqui")
 
-import soundfile as sf
 from tqdm.auto import tqdm
 
 from coqui.TTS.api import TTS

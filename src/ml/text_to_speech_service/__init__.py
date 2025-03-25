@@ -3,8 +3,6 @@ import os
 
 from logging import getLogger
 
-from src.ml.api_client import APIClient
-from src.pipeline_models.enums import ProcessStatus
 from src.file_repository import FileRepository
 from src.pipeline_models.models import VideoTranslation
 from src.pipeline_models.models import TranslatedTextedSegment
@@ -24,21 +22,18 @@ class TextToSpeechManager:
     public_id: str
     # pass it
     _tts_client: TTSClient
-    _api_client: APIClient
     _file_repository: FileRepository
     tts_sample_rate: int = 24_000
     audio_dubbing_manager: AudioDubbingManager
 
     def __init__(self, 
                 public_id: str, 
-                api_client: APIClient,
                 file_repository: FileRepository,
                 tts_sample_rate: int, 
                 logger, device="cuda", 
                 tts_name="xtts", 
                 eleven_api_token=""):
         self.public_id = public_id
-        self._api_client = api_client
         self._file_repository = file_repository
 
         self.tts_sample_rate = tts_sample_rate
@@ -153,8 +148,4 @@ class TextToSpeechManager:
             translated_texts=video_translation.translated_texts,
         )
 
-        self._api_client.update_video(self.public_id,
-                                      new_video_translation,
-                                      progress=10,
-                                      status=ProcessStatus.done)
         return new_video_translation
