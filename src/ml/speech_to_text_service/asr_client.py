@@ -7,10 +7,9 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 sys.path.append("/app")
-sys.path.append("/app/whisperX")
 sys.path.append("/app/src")
 
-from whisperX import whisperx
+import whisperx
 import attr
 import torch
 import requests
@@ -119,8 +118,8 @@ class ASRX:
         models_base_dir = project_root / "models_weights"
         
         # Whisper model path
-        whisper_model_dir = models_base_dir / "whisper-large-v2" / "f0fe81560cb8b68660e564f55dd99207059c092e"
-        self.model_path_whisper = str(whisper_model_dir.resolve())
+        # whisper_model_dir = models_base_dir / "whisper-large-v3"
+        self.model_path_whisper = "distil-large-v3"
 
         self.model = None
         self.diarize_model = None
@@ -130,8 +129,8 @@ class ASRX:
         self.model_path_diarization = str(diarize_model_dir.resolve())
         
         # Verify model paths exist
-        if not os.path.exists(self.model_path_whisper):
-            raise FileNotFoundError(f"Whisper model not found at: {self.model_path_whisper}")
+        # if not os.path.exists(self.model_path_whisper):
+        #     raise FileNotFoundError(f"Whisper model not found at: {self.model_path_whisper}")
         
         if not os.path.exists(self.model_path_diarization):
             raise FileNotFoundError(f"Diarization model not found at: {self.model_path_diarization}")
@@ -149,9 +148,10 @@ class ASRX:
         self.diarize_model = None
 
     def load_models(self):
+        # For int8 models
+        compute_type = "int8" if self.device != "cpu" else "float32"
         
-        compute_type = "float32" if self.device == "cpu" else "float16"
-
+        # Consider medium-int8 for good balance of speed and accuracy
         self.model = whisperx.load_model(
             self.model_path_whisper, 
             device=self.device, 
@@ -175,7 +175,11 @@ class ASRX:
         
         audio = whisperx.load_audio(source_file)
         
-        response = self.model.transcribe(audio, language=language, batch_size=8)
+        response = self.model.transcribe(
+            audio, 
+            language=language, 
+            batch_size=8
+        )
 
         language = response["language"]
         lang = language
