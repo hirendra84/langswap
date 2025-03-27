@@ -9,8 +9,9 @@ import os.path
 import urllib.request
 import requests
 from src.pipeline_models.models import RemoteFile
-
+from typing import List
 import os
+from pathlib import Path
 
 load_dotenv()
 BUCKET = os.getenv('BUCKET', 'debug-bucket-langswap-bucket')
@@ -40,6 +41,11 @@ class FileRepository(ABC):
         ...
 
     def subdir(self, dir_name: str) -> str:
+        """ Creates folder self.directory / dir_name.
+        :returns: new folder path"""
+        ...
+    
+    def save_dir(self, dir_name: str) -> List[RemoteFile]:
         """ Creates folder self.directory / dir_name.
         :returns: new folder path"""
         ...
@@ -138,6 +144,20 @@ class RemoteFileRepository(FileRepository):
         os.makedirs(new_dir, exist_ok=True)
         return new_dir
 
+    def save_dir(self, dir_name):
+        # print(dir_name)
+        #list_files = list(map(lambda x: str(x).replace(dir_name, ""), Path(dir_name).rglob("*.*")))
+        list_files = list(map(str, Path(dir_name).rglob("*.*")))
+        remove_file_collection = []
+        for file_name in list_files:
+            # print(file_name, self._directory)
+            local_file = RemoteFile(
+                name=file_name,
+                file_path=file_name, #os.path.join(self._directory, file_name)
+            )
+            remote_file = self.save_file(local_file)
+            remove_file_collection.append(remote_file)
+        return list_files
 
 class LocalFileRepository(FileRepository):
     _directory: str
@@ -245,3 +265,18 @@ class LocalFileRepository(FileRepository):
         new_dir = os.path.join(self._directory, dir_name)
         os.makedirs(new_dir, exist_ok=True)
         return new_dir
+
+    def save_dir(self, dir_name):
+        #list_files = list(map(lambda x: str(x).replace(dir_name, ""), Path(dir_name).rglob("*.*")))
+        #list_files = list(map(str, Path(dir_name).rglob("*.*")))
+        list_files = list(map(str, Path(dir_name).rglob("*.*")))
+        remove_file_collection = []
+        for file_name in list_files:
+            #print(file_name, self._directory)
+            local_file = RemoteFile(
+                name=file_name,
+                file_path=file_name, #os.path.join(self._directory, file_name)
+            )
+            remote_file = self.save_file(local_file)
+            remove_file_collection.append(remote_file)
+        return list_files

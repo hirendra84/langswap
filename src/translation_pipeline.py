@@ -42,6 +42,7 @@ class VideoTranslationPipeline:
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers, lang=self.config.source_lang)
         if self.config.source_lang == None:
             self.config.source_lang = map_language_to_code(self.video_translation.source_lang_code, system="reverse_from_whisper")
+        
 
     def _generate_translation(self):
         torch.cuda.empty_cache()
@@ -50,7 +51,7 @@ class VideoTranslationPipeline:
                                                device=self.config.device, 
                                                logger=self.logger)
         self.video_translation = translate_manager.translate(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang)
-        
+
     def _generate_speech(self):
         torch.cuda.empty_cache()
         tts_manager = TextToSpeechManager(self.config.public_id, 
@@ -85,6 +86,7 @@ class VideoTranslationPipeline:
         # TODO: save correctly if need on the s3
         styled_audio = self._file_repository.get_file("styled_full_audio.wav")
         torchaudio.save(styled_audio.file_path, generated_audio, generated_sr)
+        self._file_repository.save_file(styled_audio)
 
         audio_backgrounds = {
             name: remote_file
@@ -101,6 +103,7 @@ class VideoTranslationPipeline:
         self.logger.file_logger.info("Step: merge the video with audio")
         result_audio = self._file_repository.get_file("merged_background_audio.wav")
         torchaudio.save(result_audio.file_path, merged_background_audio, save_sr)
+        self._file_repository.save_file(result_audio)
 
         resulted_video = self._file_repository.get_file("resulted_video.mp4")
         source_video = self.video_translation.source_file.file_path

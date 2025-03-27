@@ -56,11 +56,11 @@ class SpeechToTextManager:
         else:
             audio_file = self._extract_audio(video_translation.source_file.file_path)
             audio_file = self._file_repository.save_file(audio_file)
-
+            
         
         self.logger.file_logger.info('Step: Demucs separation')
         background_paths = DemucsClient().separate(audio_file.file_path, self._file_repository.subdir('background_files'))
-
+        self._file_repository.save_dir(self._file_repository.subdir('background_files'))
 
         background_files = {
             name: path for path, name in background_paths
@@ -72,8 +72,10 @@ class SpeechToTextManager:
         # transcribe
         file_name = "raw_transcribed_info.json"
         log_text = os.path.join(self._file_repository.directory, file_name)
+
         lang_file_name = "lang_detect_info.json"
         log_lang = os.path.join(self._file_repository.directory, lang_file_name)
+
         if os.path.exists(log_text) and os.path.exists(log_lang):
             self.logger.file_logger.info(f'Getting info from transcribed samples')
             with open(log_text, encoding="utf-8") as f:
@@ -92,9 +94,16 @@ class SpeechToTextManager:
                 self.logger.log_json(file_name=lang_file_name, data=detect_lang)
                 self.logger.log_json(file_name=file_name, data=json_segments)
 
+                local_log_text = self._file_repository.get_file(file_name)
+                self._file_repository.save_file(local_log_text)
+
+                local_log_lang = self._file_repository.get_file(lang_file_name)
+                self._file_repository.save_file(local_log_lang)
+
         # split in sentences for pauses     
         file_name = "splitted_sentences_pauses.json"
         log_text = os.path.join(self._file_repository.directory, file_name)
+
         if os.path.exists(log_text):
             self.logger.file_logger.info(f'Getting info from already splitted samples')
             with open(log_text, encoding="utf-8") as f:
@@ -113,6 +122,8 @@ class SpeechToTextManager:
             segments = self._remap_pauses(json_segments)
             json_segments = [{"text": seg.text, "start": seg.start, "end": seg.end, "speaker": seg.speaker} for seg in segments]
             self.logger.log_json(file_name=file_name, data=json_segments)
+            local_log_text = self._file_repository.get_file(file_name)
+            self._file_repository.save_file(local_log_text)
 
         return VideoTranslation(
             source_lang_code=source_lang_code,

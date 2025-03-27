@@ -50,6 +50,7 @@ class TranslationManager:
                                     speaker=s.speaker
                                 )
                             )
+
         else:
             self._translator_client.load_models()
             translations = self._translator_client.translate(sentences=sentences_texts,
@@ -72,6 +73,8 @@ class TranslationManager:
                     )
             json_segments = [{"translation": seg.translation, "text": seg.text} for seg in translated_segments]
             self.logger.log_json(file_name="translations.json", data=json_segments)
+            local_log_text = self._file_repository.get_file("translations.json")
+            self._file_repository.save_file(local_log_text)
 
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,
