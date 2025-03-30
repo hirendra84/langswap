@@ -15,7 +15,7 @@ class TranslatorClient(ABC):
     def __init__(self, device: str):
         ...
 
-    def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: str) -> list[str]:
+    def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: List[str]) -> list[str]:
         ...
 
 
@@ -69,17 +69,76 @@ class GemmaTranslationClient(TranslatorClient):
 
         input_len = inputs["input_ids"].shape[-1]
         with torch.inference_mode():
-            generation = self.model.generate(**inputs, max_new_tokens=400, do_sample=False)
+            generation = self.model.generate(**inputs, max_new_tokens=512, do_sample=False)
             generation = generation[0][input_len:]
 
         decoded = self.processor.decode(generation, skip_special_tokens=True)
         return decoded
 
 
-    def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: str) -> list[str]:
+    def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: List[str]) -> list[str]:
         translations = []
-        for sentence in tqdm(sentences):
-            translated_sent = self.translate_sent(sentence, input_lang=source_lang, output_lang=target_lang, context=context)
+        for i, sentence in tqdm(enumerate(sentences)):
+            translated_sent = self.translate_sent(sentence, input_lang=source_lang, output_lang=target_lang, context=context[i])
 
             translations.append(translated_sent)
         return translations
+    
+    
+class QwenTranslationClient(TranslatorClient):
+    def __init__(self, device="cuda", path_to_model="./models_weights/qwen2.5-7B-instruct-1M"):
+        super().__init__(device)
+
+        self.device = device
+        
+        self.path_to_model = os.path.abspath(path_to_model)
+
+        self.tokenizer = None
+        self.model = None
+
+    def load_models(self):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.path_to_model,
+            torch_dtype="auto",
+            device_map=self.device,
+            cache_dir=MODEL_WEIGHTS_DIR
+        ).eval()    
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.path_to_model,
+            cache_dir=MODEL_WEIGHTS_DIR
+        )
+
+    def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, temperature=0.75, top_p=1.0, top_k=0, max_new_tokens=1024) -> str:
+        messages = [
+            {"role": "system", "content": f"You are a translation assistant. Your task is to translate the text provided in the user's input (can contain syntax and semantic error, need fix them) from the source language to the target language, using context. You will respond only with the translation of the text in the target language."},    
+            {"role": "user", "content": f'Translate from "input_lang": "{input_lang}" to "target_lang": "{output_lang}", "context": "{context}",  "text": "{text}"'}
+        ]
+
+        text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
+
+        generated_ids = self.model.generate(
+            **model_inputs,
+            max_new_tokens=512
+        )
+        generated_ids = [
+            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+        ]
+
+        decoded = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        return decoded
+
+
+    def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: List[str]) -> list[str]:
+        translations = []
+        for i, sentence in tqdm(enumerate(sentences)):
+            translated_sent = self.translate_sent(sentence, input_lang=source_lang, output_lang=target_lang, context=context[i])
+
+            translations.append(translated_sent)
+        return translations
+    
