@@ -90,7 +90,7 @@ exceptiongroup==1.2.2
 executing==2.1.0
 fastapi==0.115.8
 fastapi-cli==0.0.5
-faster-whisper==1.0.3
+faster-whisper==1.1.0
 fastjsonschema==2.21.1
 ffmpy==0.5.0
 filelock==3.16.1
