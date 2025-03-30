@@ -23,3 +23,4 @@ coverage.xml
 .gitlab/**
 check_chenger_pipeline.ipynb
 check_generation.ipynb
+tests/

@@ -173,3 +173,4 @@ cython_debug/
 #local debug notebook
 check_chenger_pipeline.ipynb
 check_generation.ipynb
+tests
