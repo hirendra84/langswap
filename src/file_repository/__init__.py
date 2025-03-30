@@ -17,6 +17,29 @@ load_dotenv()
 BUCKET = os.getenv('BUCKET', 'debug-bucket-langswap-bucket')
 
 
+
+def download_s3_directory(s3_client, bucket_name, s3_prefix, local_dir):
+
+    
+    os.makedirs(local_dir, exist_ok=True)
+    
+    paginator = s3_client.get_paginator('list_objects_v2')
+    pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_prefix)
+    
+    for page in pages:
+        if 'Contents' in page:
+            for obj in page['Contents']:
+                key = obj['Key']
+                relative_path = os.path.relpath(key, s3_prefix)
+                local_path = os.path.join(local_dir, relative_path)
+                
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                
+                if not key.endswith('/'):
+                    s3_client.download_file(bucket_name, key, local_path)
+
+
+
 class FileRepository(ABC):
 
     def __init__(self, public_id, base_directory: str, s3_client: boto3.client):

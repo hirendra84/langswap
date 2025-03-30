@@ -4,9 +4,10 @@ import boto3
 import os
 import logging
 
-from src.translation_pipeline import VideoTranslationPipeline
-from src.pipeline_models.models import TranslationPipelineConfig
-from src.file_repository import RemoteFile, RemoteFileRepository
+from src.translation_pipeline import VideoTranslationPipeline, ChangeManager
+from src.pipeline_models.models import TraslationUpdate
+from src.pipeline_models.models import TranslationPipelineConfig, load_config_from_json
+from src.file_repository import RemoteFile, RemoteFileRepository, download_s3_directory
 
 load_dotenv()
 
@@ -138,6 +139,63 @@ def process_translation(input, progress_callback=None):
         's3_source_transcript_url': f'{source_srt.s3_url}',
         's3_translated_transcript_url': f'{translated_srt.s3_url}'
     }
+
+def process_update_translation(input, progress_callback=None):
+    """
+    Core translation processing function that can be used both by RunPod handler
+    and local testing
+    
+    Args:
+        input: Dictionary with translation parameters
+        progress_callback: Optional function to report progress
+    """
+    # Helper function for progress updates
+    def update_progress(message):
+        if progress_callback:
+            progress_callback(message)
+        else:
+            print(message)
+    
+    public_id = input.get('public_id')
+    s3_video_url = input.get("s3_video_url")
+    update_translation_collection = input.get("update_translation")
+    
+    # First progress update - Initialization
+    update_progress("0% Initializing translation pipeline")
+
+    s3_client = init_s3_client()
+    repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
+    get_file(repo, s3_video_url)
+    bucket = os.getenv('BUCKET')
+    download_s3_directory(s3_client, bucket, f"{BASE_DIR}/{public_id}", f"{BASE_DIR}/{public_id}")
+    config_file = repo.get_file("config.json")
+    config = load_config_from_json(config_file.file_path)
+    
+    pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
+    # Second progress update - Transcription
+    update_progress("30% Loading cache")
+    video_translation = pipeline.translate_video()
+
+  
+    update_progress("60% Initializing change manager")
+    change_menager = ChangeManager(pipeline, video_translation)
+    
+    video_translation = change_menager.apply_update_translations(TraslationUpdate.from_pairs(update_translation_collection))
+    update_progress("90% Apply changes")
+    update_progress("95% Generating subtitle files")
+    pipeline.video_translation = video_translation
+    source_srt, translated_srt = pipeline.generate_srt_files()
+    
+    result_video = video_translation.processed_video
+    
+    
+    # Return URLs for both the video and the SRT files
+    return {
+        's3_result_video_url': f'{result_video.s3_url}',
+        's3_source_transcript_url': f'{source_srt.s3_url}',
+        's3_translated_transcript_url': f'{translated_srt.s3_url}'
+    }
+
 
 def test_video_translation_local(input_file="test_input.json"):
     """

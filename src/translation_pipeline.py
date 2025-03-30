@@ -5,7 +5,7 @@ import torchaudio
 import src.model_config
 from src.pipeline_models.models import RemoteFile
 from src.pipeline_models.models import VideoTranslation
-from src.pipeline_models.models import TranslationPipelineConfig
+from src.pipeline_models.models import TranslationPipelineConfig, save_config_to_json, load_config_from_json
 from src.pipeline_models.models import TraslationUpdate
 from src.ml.speech_to_text_service import SpeechToTextManager
 from src.ml.text_to_speech_service import TextToSpeechManager
@@ -23,8 +23,15 @@ from typing import List
 class VideoTranslationPipeline:
     def __init__(self, config: TranslationPipelineConfig, file_repository):
         self.config = config
+        
+
 
         self._file_repository = file_repository
+        config_file = os.path.join(self._file_repository.directory, "config.json")
+        save_config_to_json(config, config_file)
+        config_file = self._file_repository.get_file("config.json")
+        self._file_repository.save_file(config_file)
+        
 
         file = RemoteFile(
             file_path=self.config.source_video_path,
@@ -144,6 +151,7 @@ class VideoTranslationPipeline:
         self._generate_speech()
         self.video_translation = self._merge(self.config.dubbing_algo)
         torch.cuda.empty_cache()
+
         return self.video_translation
 
     def generate_srt_files(self):
@@ -216,6 +224,7 @@ class ChangeManager:
         tts_manager.clear_result_video(self.video_translation_pipeline._file_repository.directory + "/resulted_video.mp4")
         
         self.video_translation = self.video_translation_pipeline._merge(self.video_translation_pipeline.config.dubbing_algo)
+        return self.video_translation
         
         
     
