@@ -123,7 +123,7 @@ class ASRX:
         self.diarize_model = None
 
         # Diarization model path
-        diarize_model_dir = models_base_dir / "pyannote" / "models--pyannote--speaker-diarization-3.1" / "snapshots" / "84fd25912480287da0247647c3d2b4853cb3ee5d" / "config.yaml"
+        diarize_model_dir = models_base_dir / "pyannote/pyannote_diarization_config.yaml"#models_base_dir / "pyannote" / "models--pyannote--speaker-diarization-3.1" / "snapshots" / "84fd25912480287da0247647c3d2b4853cb3ee5d" / "config.yaml"
         self.model_path_diarization = str(diarize_model_dir.resolve())
         
         # Verify model paths exist
@@ -156,10 +156,13 @@ class ASRX:
             compute_type=compute_type, 
             local_files_only=False
         )
-
+        cwd = Path.cwd().resolve() 
+        cd_to = Path(self.model_path_diarization).parent.parent.resolve()
+        os.chdir(cd_to)
         self.diarize_model = whisperx.DiarizationPipeline(
             self.model_path_diarization, device=self.device
         )
+        os.chdir(cwd)
 
 
     def get_cache_dir(self):
