@@ -142,3 +142,49 @@ class QwenTranslationClient(TranslatorClient):
             translations.append(translated_sent)
         return translations
     
+
+class YandexTranslationClient(TranslatorClient):
+    def __init__(self, device="cuda", path_to_model="./models_weights/yandex_gpt5_lite_8b_instruct"):
+        super().__init__(device)
+
+        self.device = device
+        
+        self.path_to_model = os.path.abspath(path_to_model)
+
+        self.tokenizer = None
+        self.model = None
+
+    def load_models(self):
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.path_to_model,
+            torch_dtype="auto",
+            device_map=self.device,
+            cache_dir=MODEL_WEIGHTS_DIR
+        ).eval()    
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.path_to_model,
+            cache_dir=MODEL_WEIGHTS_DIR
+        )
+
+    def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, temperature=0.75, top_p=1.0, top_k=0, max_new_tokens=1024) -> str:
+        messages = [
+            {"role": "system", "content": f"You are a translation assistant. Your task is to translate the text provided in the user's input (can contain syntax and semantic error, need fix them) from the source language to the target language, using context. You will respond only with the translation of the text in the target language."},    
+            {"role": "user", "content": f'Translate from "input_lang": "{input_lang}" to "target_lang": "{output_lang}", "context": "{context}",  "text": "{text}"'}
+        ]
+
+        input_ids = self.tokenizer.apply_chat_template(
+            messages, tokenize=True, return_tensors="pt"
+        ).to(self.device)
+
+        outputs = self.model.generate(input_ids, max_new_tokens=1024)
+        return self.tokenizer.decode(outputs[0][input_ids.size(1) :], skip_special_tokens=True)
+
+
+    def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: List[str]) -> list[str]:
+        translations = []
+        for i, sentence in tqdm(enumerate(sentences)):
+            translated_sent = self.translate_sent(sentence, input_lang=source_lang, output_lang=target_lang, context=context[i])
+
+            translations.append(translated_sent)
+        return translations
+    

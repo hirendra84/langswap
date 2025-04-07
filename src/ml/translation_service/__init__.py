@@ -4,7 +4,7 @@ import json
 from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 from src.file_repository import FileRepository
 
-from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient, QwenTranslationClient
+from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient, QwenTranslationClient, YandexTranslationClient
 
 
 logger = getLogger(__name__)
@@ -16,7 +16,7 @@ class TranslationManager:
     _translator_client: TranslatorClient
     _file_repository: FileRepository
 
-    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger, context_widows_size: int = 4):
+    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger, context_widows_size: int = 10):
         self.public_id = public_id
         self._file_repository = file_repository
 
