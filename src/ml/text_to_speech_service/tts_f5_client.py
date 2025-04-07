@@ -20,52 +20,45 @@ from tqdm import tqdm
 import numpy as np
 
 import torchaudio
+from ruaccent import RUAccent
 
 
 class FlowClient:
     def __init__(
         self,
         config_path="/app/F5-TTS/inference-cli.toml",
-        vocab_file='/app/F5-TTS/data/Emilia_ZH_EN_pinyin/vocab.txt',
+        vocab_file='./models_weights/f5_weight/vocab.txt',
         vocos_local_path: str = "./models_weights/vocos-mel-24khz",
     ):
         # TODO: change all the paths to relative
-        self.config = tomli.load(open(config_path, "rb"))
+        #self.config = tomli.load(open(config_path, "rb"))
         self.vocab_file = vocab_file
 
         # where do we use vocos?
         self.vocos = load_vocoder(is_local=True, local_path=vocos_local_path)
         
+        self.accentizer = RUAccent()
         self.tts = self.load_tts_flow()
-
-        self.ref_audio = "/app/F5-TTS/test_en_1_ref_short.wav"
-        self.ref_text = self.config["ref_text"]
+        #self.ref_audio = "/app/F5-TTS/test_en_1_ref_short.wav"
+        #self.ref_text = self.config["ref_text"]
 
     def load_tts_flow(self):
         model_cls = DiT
         model_cfg = dict(
             dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4
         )
-        ckpt_file = self.config.get("ckpt_file", "")
-        if not ckpt_file:
-            repo_name = "F5-TTS"
-            exp_name = "F5TTS_Base"
-            ckpt_step = 1200000
-            ckpt_file = str(
-                cached_path(
-                    f"hf://SWivid/{repo_name}/{exp_name}/model_{ckpt_step}.safetensors"
-                )
-            )
+        self.accentizer.load(omograph_model_size='turbo3.1', use_dictionary=True, tiny_mode=False, workdir="./models_weights/ruaccent")
 
-        model = load_model(model_cls, model_cfg, ckpt_file, self.vocab_file)
+        model = load_model(model_cls, model_cfg, "./models_weights/f5_weight/model_last.pt", self.vocab_file)
         return model
 
     def generate_audio(
         self,
         text: str,
         source_audio_file: str,
+        source_text: str,
         save_path: str,
-        remove_silence: bool = True,
+        language: str,
         duration=None
     ):
         # ref_audio, ref_text = preprocess_ref_audio_text(ref_audio, ref_text) # TODO remove and use only the main voice
@@ -78,9 +71,11 @@ class FlowClient:
             match = re.match(reg2, text)
             text = re.sub(reg2, "", text)
             gen_text = text.strip()
-
-            audio, final_sample_rate, spectragram = infer_process(
-                self.ref_audio, self.ref_text, gen_text, self.tts, fix_duration=duration
+            if language == "russian":
+                gen_text = self.accentizer.process_all(gen_text)
+            
+            audio, final_sample_rate, _ = infer_process(
+                source_audio_file, source_text, gen_text, self.tts, fix_duration=None, vocos=self.vocos
             )
             generated_audio_segments.append(audio)
 
@@ -101,7 +96,7 @@ class FlowClient:
 
             if not os.path.exists(file_path):
                 self.generate_audio(
-                    segment.translation, segment.source_file, file_path, language
+                    segment.translation, segment.source_file, segment.text, file_path, language
                 )
             video_translation.translated_texts[idx].generated_file = file_path
         return video_translation
