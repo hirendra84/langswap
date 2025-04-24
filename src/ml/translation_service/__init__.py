@@ -22,7 +22,7 @@ class TranslationManager:
 
         self.device = device
         self.logger = logger
-        self._translator_client = GemmaTranslationClient(self.device)
+        self._translator_client = QuantizedGemmaTranslationClient(self.device)
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts

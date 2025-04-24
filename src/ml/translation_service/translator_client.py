@@ -9,6 +9,9 @@ import torch
 from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 from typing import Tuple, List
 from src.model_config import MODEL_WEIGHTS_DIR
+from llama_cpp import Llama
+
+PROMPT = "You are a translation assistant. Your task is to translate the text provided in the user's input (can contain syntax and semantic error, need fix them) from the source language to the target language, using context. You will respond only with the translation of the text in the target language."
 
 class TranslatorClient(ABC):
 
@@ -32,10 +35,11 @@ class GemmaTranslationClient(TranslatorClient):
         self.model = None
 
     def load_models(self):
+        
         self.model = Gemma3ForConditionalGeneration.from_pretrained(
             self.path_to_model,
             device_map=self.device,
-            cache_dir=MODEL_WEIGHTS_DIR
+            cache_dir=MODEL_WEIGHTS_DIR,
         ).eval()      
         self.processor = AutoProcessor.from_pretrained(
             self.path_to_model,
@@ -44,15 +48,9 @@ class GemmaTranslationClient(TranslatorClient):
 
     def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, temperature=0.75, top_p=1.0, top_k=0, max_new_tokens=1024) -> str:
         messages = [
-
             {
                 "role": "system", 
-                "content":  [
-                    {
-                        "type": "text", 
-                        "text": "You are a translation assistant. Your task is to translate the text provided in the user's input (can contain syntax and semantic error, need fix them) from the source language to the target language, using context. You will respond only with the translation of the text in the target language."
-                    }
-                ]
+                "content": [{"type": "text", "text": PROMPT}]
             },
             {
                 "role": "user",
@@ -72,7 +70,15 @@ class GemmaTranslationClient(TranslatorClient):
             generation = self.model.generate(**inputs, max_new_tokens=100, do_sample=False)
             generation = generation[0][input_len:]
 
+        raw_decoded = self.processor.decode(generation, skip_special_tokens=False)
+        print("Raw decoded:", raw_decoded)
+        
         decoded = self.processor.decode(generation, skip_special_tokens=True)
+        print("Final decoded:", decoded)
+        
+        if not decoded.strip():
+            raise ValueError("Empty translation")
+        
         return decoded
 
 
@@ -81,5 +87,62 @@ class GemmaTranslationClient(TranslatorClient):
         for sentence in tqdm(sentences):
             translated_sent = self.translate_sent(sentence, input_lang=source_lang, output_lang=target_lang, context=context)
 
+            translations.append(translated_sent)
+        return translations
+
+class QuantizedGemmaTranslationClient(TranslatorClient):
+    def __init__(self, device="cuda", model_path="/media/beijing/checkpoints/gemma-3-12b-it-Q4_K_M.gguf", n_gpu_layers=-1):
+        super().__init__(device)
+        self.model_path = model_path
+        self.n_gpu_layers = n_gpu_layers  # -1 means use all available GPU layers
+        self.model = None
+        
+    def load_models(self):
+        # For GGUF models, we use llama-cpp-python
+        self.model = Llama(
+            model_path=self.model_path,
+            n_gpu_layers=self.n_gpu_layers,
+            n_ctx=4096,  # Context window size
+            verbose=False
+        )
+    
+    def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, 
+                       temperature=1.0, top_k=64, top_p=0.95, min_p=0.0, max_new_tokens=1024) -> str:
+        # Format the prompt for Gemma
+        prompt = f"""<start_of_turn>system
+{PROMPT}<end_of_turn>
+<start_of_turn>user
+Translate from "input_lang": "{input_lang}" to "target_lang": "{output_lang}", "context": "{context}",  "text": "{text}"<end_of_turn>
+<start_of_turn>model
+"""
+        
+        # Generate response using the recommended parameters
+        response = self.model.create_completion(
+            prompt, 
+            max_tokens=max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            min_p=min_p,
+            stop=["<end_of_turn>"]
+        )
+        
+        decoded = response["choices"][0]["text"].strip()
+        print("Final decoded:", decoded)
+        
+        if not decoded.strip():
+            raise ValueError("Empty translation")
+        
+        return decoded
+
+    def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: str) -> list[str]:
+        translations = []
+        for sentence in tqdm(sentences):
+            translated_sent = self.translate_sent(
+                sentence, 
+                input_lang=source_lang, 
+                output_lang=target_lang, 
+                context=context
+            )
             translations.append(translated_sent)
         return translations

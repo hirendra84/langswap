@@ -61,6 +61,7 @@ coqui-tts-trainer==0.1.4
 coverage==7.6.1
 cryptography==44.0.0
 ctranslate2==4.4.0
+cutlet==0.5.0
 cycler==0.12.1
 cymem==2.0.8
 Cython==3.0.11
@@ -90,7 +91,7 @@ exceptiongroup==1.2.2
 executing==2.1.0
 fastapi==0.115.8
 fastapi-cli==0.0.5
-faster-whisper==1.0.3
+faster-whisper==1.1.0
 fastjsonschema==2.21.1
 ffmpy==0.5.0
 filelock==3.16.1
@@ -102,6 +103,7 @@ frozenlist==1.4.1
 fsspec==2024.9.0
 gitdb==4.0.11
 GitPython==3.1.43
+hangul_romanize==0.1.0
 google-api-core==2.24.0
 google-auth==2.37.0
 google-cloud-core==2.4.1

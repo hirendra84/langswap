@@ -35,10 +35,6 @@ RUN pip install -r  requirements.txt
 RUN rm -rf /var/lib/apt/lists/*
 
 
-ENV PYTHONPATH="/app/:${PYTHONPATH}"
-ENV LOCAL_DEBUG="False"
-ENV COQUI_TOS_AGREED="1"
-ENV OPENVOICE_CONF_DIR="/openvoice_conf"
 ENV BASE_WORKING_DIR="/app/data"
 
 COPY . .

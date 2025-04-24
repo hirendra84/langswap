@@ -13,6 +13,7 @@ import torch
 import requests
 from time import sleep
 from src.utils.ml_processing.lang2code_mapper import map_language_to_code
+from src.model_config import MODEL_WEIGHTS_DIR
 
 # Load environment variables from .env file
 load_dotenv()
@@ -164,7 +165,7 @@ class ASRX:
 
     def get_cache_dir(self):
         """Returns the models_weights directory path"""
-        return str(Path(self.model_path_whisper).parent.parent)  # Go up to models_weights
+        return MODEL_WEIGHTS_DIR  # Go up to models_weights
 
     def transcribe(self, source_file: str, lang=None, num_speakers=None) -> Output:
         language = None

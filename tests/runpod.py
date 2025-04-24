@@ -60,17 +60,49 @@ def generate_presigned_url(s3_client, bucket_name, object_key, expiration=259200
     )
     return url
 
-def submit_translation_job(video_url, runpod_api_key, endpoint_id='imukd6fpsg4hk4'):
+def get_target_language_for_video(video_key):
+    """Determine target language based on the source video filename"""
+    # Extract source language from filename (assuming format like 'tests/english.mp4')
+    source_language = os.path.basename(video_key).replace('.mp4', '').lower()
+    
+    # Map of source languages to target languages
+    # Each source language video will be translated to a different target language
+    language_map = {
+        'arabic': 'english',
+        'czech': 'spanish',
+        'dutch': 'german',
+        'english': 'french',
+        'french': 'italian',
+        'german': 'dutch',
+        'hindi': 'russian',
+        'hungarian': 'polish',
+        'italian': 'portuguese',
+        'japanese': 'korean',
+        'korean': 'japanese',
+        'polish': 'hungarian',
+        'portuguese': 'turkish',
+        'russian': 'hindi',
+        'spanish': 'czech',
+        'turkish': 'arabic'
+    }
+    
+    # If source language is in our map, return its target, otherwise default to English
+    return language_map.get(source_language, 'english')
+
+def submit_translation_job(video_url, runpod_api_key, video_key, endpoint_id='imukd6fpsg4hk4'):
     """Submit a translation job to RunPod API"""
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {runpod_api_key}'
     }
     
+    # Get target language based on the video filename
+    target_language = get_target_language_for_video(video_key)
+    
     # Prepare job input data (based on test_input.json)
     input_data = {
         "input": {
-            "target_language": "russian",
+            "target_language": target_language,
             "tts_engine": "xtts",
             "watermark": True,
             "name": f"test_{os.path.basename(video_url.split('?')[0])}",
@@ -166,10 +198,11 @@ def run_translation_tests():
         
         # Generate pre-signed URL
         video_url = generate_presigned_url(s3_client, 'langswap-videos-dev', video_key)
-        logger.info(f"Processing video: {video_key}")
+        target_language = get_target_language_for_video(video_key)
+        logger.info(f"Processing video: {video_key} with target language: {target_language}")
         
         # Submit translation job
-        job_response = submit_translation_job(video_url, credentials['runpod_api_key'])
+        job_response = submit_translation_job(video_url, credentials['runpod_api_key'], video_key)
         
         if job_response and 'id' in job_response:
             job_id = job_response['id']
@@ -263,12 +296,13 @@ def run_local_translation_tests():
         
         # Generate pre-signed URL
         video_url = generate_presigned_url(s3_client, 'langswap-videos-dev', video_key)
-        logger.info(f"Processing video locally: {video_key}")
+        target_language = get_target_language_for_video(video_key)
+        logger.info(f"Processing video locally: {video_key} with target language: {target_language}")
         
         # Create a test input for the local translation pipeline
         test_input = {
             "input": {
-                "target_language": "russian",
+                "target_language": target_language,
                 "tts_engine": "xtts",
                 "watermark": True,
                 "name": f"test_{os.path.basename(video_key)}",
