@@ -11,8 +11,6 @@ from typing import Tuple, List
 from src.model_config import MODEL_WEIGHTS_DIR
 from llama_cpp import Llama
 
-PROMPT = "You are a translation assistant. Your task is to translate the text provided in the user's input (can contain syntax and semantic error, need fix them) from the source language to the target language, using context. You will respond only with the translation of the text in the target language."
-
 class TranslatorClient(ABC):
 
     def __init__(self, device: str):
@@ -50,7 +48,7 @@ class GemmaTranslationClient(TranslatorClient):
         messages = [
             {
                 "role": "system", 
-                "content": [{"type": "text", "text": PROMPT}]
+                "content": [{"type": "text", "text": "You are a translation assistant. Your task is to translate the text provided in the user's input (can contain syntax and semantic error, need fix them) from the source language to the target language, using context. You will respond only with the translation of the text in the target language."}]
             },
             {
                 "role": "user",
@@ -91,7 +89,7 @@ class GemmaTranslationClient(TranslatorClient):
         return translations
 
 class QuantizedGemmaTranslationClient(TranslatorClient):
-    def __init__(self, device="cuda", model_path="/media/beijing/checkpoints/gemma-3-12b-it-Q4_K_M.gguf", n_gpu_layers=-1):
+    def __init__(self, device="cuda", model_path="./models_weights/gemma-3-12b-it-Q4_K_M.gguf", n_gpu_layers=-1):
         super().__init__(device)
         self.model_path = model_path
         self.n_gpu_layers = n_gpu_layers  # -1 means use all available GPU layers
@@ -102,32 +100,41 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
         self.model = Llama(
             model_path=self.model_path,
             n_gpu_layers=self.n_gpu_layers,
-            n_ctx=4096,  # Context window size
+            chat_format="gemma",
             verbose=False
         )
     
     def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, 
                        temperature=1.0, top_k=64, top_p=0.95, min_p=0.0, max_new_tokens=1024) -> str:
-        # Format the prompt for Gemma
-        prompt = f"""<start_of_turn>system
-{PROMPT}<end_of_turn>
-<start_of_turn>user
-Translate from "input_lang": "{input_lang}" to "target_lang": "{output_lang}", "context": "{context}",  "text": "{text}"<end_of_turn>
-<start_of_turn>model
-"""
         
-        # Generate response using the recommended parameters
-        response = self.model.create_completion(
-            prompt, 
+        # Define the messages structure for create_chat_completion
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"You are a native speaker of {output_lang}. You have a fantastic vocabulary. You like to translate words down to their original meaning yet something that your friends would say."
+                    
+                )
+            },
+            {"role": "user", 
+            "content": f"Translate the following text from {input_lang} to {output_lang}. Input may contain ASR errors, try to fix errors depending on context."
+                    "The resulting text would be used in dubbing so make text longer/shorter to match the original length."
+                    f"The resulting text should extend all dates, numbers and addresses into their normal form. I.e. 22 -> twenty two. Make some notes on how to translate input text, then write {SENTINEL} token, after which include nothing but translation. : ```{text}```"}
+        ]
+        
+        # Generate response using create_chat_completion
+        response = self.model.create_chat_completion(
+            messages=messages,
             max_tokens=max_new_tokens,
             temperature=temperature,
             top_k=top_k,
             top_p=top_p,
             min_p=min_p,
-            stop=["<end_of_turn>"]
+            stop=["<end_of_turn>", "<eos>"] # Common stop tokens for Gemma
         )
         
-        decoded = response["choices"][0]["text"].strip()
+        # Extract the generated message content
+        decoded = response["choices"][0]["message"]["content"].strip()
         print("Final decoded:", decoded)
         
         if not decoded.strip():
