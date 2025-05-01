@@ -104,8 +104,8 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
             verbose=False
         )
     
-    def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, 
-                       temperature=1.0, top_k=64, top_p=0.95, min_p=0.0, max_new_tokens=1024) -> str:
+    def translate_sent(self, text: str, input_lang: str, output_lang: str, context: str, SENTINEL = "<|start_translation|>",
+                       temperature=1.0, top_k=64, top_p=0.95, min_p=0.0, max_new_tokens=1024*8) -> str:
         
         # Define the messages structure for create_chat_completion
         messages = [
@@ -113,11 +113,11 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
                 "role": "system",
                 "content": (
                     f"You are a native speaker of {output_lang}. You have a fantastic vocabulary. You like to translate words down to their original meaning yet something that your friends would say."
-                    
+
                 )
             },
             {"role": "user", 
-            "content": f"Translate the following text from {input_lang} to {output_lang}. Input may contain ASR errors, try to fix errors depending on context."
+             "content": f"Translate the following text from {input_lang} to {output_lang}. Input may contain ASR errors, try to fix errors depending on context."
                     "The resulting text would be used in dubbing so make text longer/shorter to match the original length."
                     f"The resulting text should extend all dates, numbers and addresses into their normal form. I.e. 22 -> twenty two. Make some notes on how to translate input text, then write {SENTINEL} token, after which include nothing but translation. : ```{text}```"}
         ]
@@ -136,6 +136,11 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
         # Extract the generated message content
         decoded = response["choices"][0]["message"]["content"].strip()
         print("Final decoded:", decoded)
+        
+        if SENTINEL not in decoded:
+            raise ValueError("Text splitter for translation is missing")
+        
+        decoded = decoded.split(SENTINEL)[-1].strip()
         
         if not decoded.strip():
             raise ValueError("Empty translation")
