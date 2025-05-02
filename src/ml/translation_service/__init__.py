@@ -4,7 +4,7 @@ import json
 from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 from src.file_repository import FileRepository
 
-from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient
+from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient, QuantizedGemmaTranslationClient
 
 
 logger = getLogger(__name__)

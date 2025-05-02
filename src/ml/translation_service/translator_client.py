@@ -101,6 +101,7 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
             model_path=self.model_path,
             n_gpu_layers=self.n_gpu_layers,
             chat_format="gemma",
+            n_ctx=8096,
             verbose=False
         )
     
