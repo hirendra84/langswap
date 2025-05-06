@@ -3,12 +3,9 @@ import torch
 import torchaudio
 
 import src.model_config
-from src.ml.api_client import MockAPIClient
-from src.file_repository import LocalFileRepository
-from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models.models import RemoteFile
 from src.pipeline_models.models import VideoTranslation
-from src.pipeline_models.models import TranslationPipelineConfig
+from src.pipeline_models.models import TranslationPipelineConfig, save_config_to_json, load_config_from_json
 from src.pipeline_models.models import TraslationUpdate
 from src.ml.speech_to_text_service import SpeechToTextManager
 from src.ml.text_to_speech_service import TextToSpeechManager
@@ -26,17 +23,20 @@ from typing import List
 class VideoTranslationPipeline:
     def __init__(self, config: TranslationPipelineConfig, file_repository):
         self.config = config
+        
 
-        self._api_client = MockAPIClient('dontcare')
 
         self._file_repository = file_repository
+        config_file = os.path.join(self._file_repository.directory, "config.json")
+        save_config_to_json(config, config_file)
+        config_file = self._file_repository.get_file("config.json")
+        self._file_repository.save_file(config_file)
+        
 
         file = RemoteFile(
             file_path=self.config.source_video_path,
             name=self.config.name
         )
-        #self.file = self._file_repository.save_file(file, force=False)
-
 
         self.logger = Logger(directory=self._file_repository.directory)
 
@@ -45,24 +45,23 @@ class VideoTranslationPipeline:
         self.audio_extensions = ["mp3", "wav"]
    
     def _generate_asr(self):
-        stt_manager = SpeechToTextManager(self.config.public_id, self._api_client, self._file_repository, device=self.config.device, logger=self.logger)
+        stt_manager = SpeechToTextManager(self.config.public_id, self._file_repository, device=self.config.device, logger=self.logger)
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers, lang=self.config.source_lang)
         if self.config.source_lang == None:
             self.config.source_lang = map_language_to_code(self.video_translation.source_lang_code, system="reverse_from_whisper")
+        
 
     def _generate_translation(self):
         torch.cuda.empty_cache()
         translate_manager = TranslationManager(self.config.public_id, 
-                                               self._api_client, 
                                                self._file_repository, 
                                                device=self.config.device, 
                                                logger=self.logger)
         self.video_translation = translate_manager.translate(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang)
-        
+
     def _generate_speech(self):
         torch.cuda.empty_cache()
         tts_manager = TextToSpeechManager(self.config.public_id, 
-                                          self._api_client, 
                                           self._file_repository, 
                                           device=self.config.device, 
                                           tts_name = self.config.tts_model,
@@ -94,6 +93,7 @@ class VideoTranslationPipeline:
         # TODO: save correctly if need on the s3
         styled_audio = self._file_repository.get_file("styled_full_audio.wav")
         torchaudio.save(styled_audio.file_path, generated_audio, generated_sr)
+        self._file_repository.save_file(styled_audio)
 
         audio_backgrounds = {
             name: remote_file
@@ -110,6 +110,7 @@ class VideoTranslationPipeline:
         self.logger.file_logger.info("Step: merge the video with audio")
         result_audio = self._file_repository.get_file("merged_background_audio.wav")
         torchaudio.save(result_audio.file_path, merged_background_audio, save_sr)
+        self._file_repository.save_file(result_audio)
 
         resulted_video = self._file_repository.get_file("resulted_video.mp4")
         source_video = self.video_translation.source_file.file_path
@@ -142,10 +143,6 @@ class VideoTranslationPipeline:
             processed_video=resulted_video
         )
 
-        self._api_client.update_video(new_video_translation.public_id,
-                                      new_video_translation,
-                                      progress=10,
-                                      status=ProcessStatus.done)
         return new_video_translation
     
     def translate_video(self):
@@ -154,6 +151,7 @@ class VideoTranslationPipeline:
         self._generate_speech()
         self.video_translation = self._merge(self.config.dubbing_algo)
         torch.cuda.empty_cache()
+
         return self.video_translation
 
     def generate_srt_files(self):
@@ -219,13 +217,14 @@ class ChangeManager:
         json_segments = [{"translation": seg.translation, "text": seg.text} for seg in self.video_translation.translated_texts]
         self.video_translation_pipeline.logger.log_json(file_name="translations.json", data=json_segments)
         
-        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._api_client, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
+        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
         vocals_path = self.video_translation.background_audio["vocals.wav"]
         for update in updates:
             tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], target_lang=self.video_translation_pipeline.config.target_lang, vocals_path=vocals_path, voice_conv=self.video_translation_pipeline.config.voice_conv)
         tts_manager.clear_result_video(self.video_translation_pipeline._file_repository.directory + "/resulted_video.mp4")
         
         self.video_translation = self.video_translation_pipeline._merge(self.video_translation_pipeline.config.dubbing_algo)
+        return self.video_translation
         
         
     

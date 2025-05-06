@@ -90,7 +90,7 @@ exceptiongroup==1.2.2
 executing==2.1.0
 fastapi==0.115.8
 fastapi-cli==0.0.5
-faster-whisper==1.0.3
+faster-whisper==1.1.0
 fastjsonschema==2.21.1
 ffmpy==0.5.0
 filelock==3.16.1
@@ -387,6 +387,7 @@ websocket-client==1.8.0
 websockets==13.1
 Werkzeug==3.0.4
 whisper-timestamped==1.14.2
+whisperx==3.3.1
 widgetsnbextension==4.0.13
 wrapt==1.16.0
 x-transformers==1.43.5

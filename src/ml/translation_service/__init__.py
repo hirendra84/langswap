@@ -1,13 +1,10 @@
 from logging import getLogger
-import pandas as pd
 import os
 import json
-from src.ml.api_client import APIClient
-from src.pipeline_models.enums import ProcessStatus
 from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 from src.file_repository import FileRepository
 
-from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient
+from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient, QwenTranslationClient, YandexTranslationClient
 
 
 logger = getLogger(__name__)
@@ -17,22 +14,31 @@ class TranslationManager:
     public_id: str
 
     _translator_client: TranslatorClient
-    _api_client: APIClient
     _file_repository: FileRepository
 
-    def __init__(self, public_id: str, api_client: APIClient, file_repository: FileRepository, device: str, logger):
+    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger, context_widows_size: int = 10):
         self.public_id = public_id
-        self._api_client = api_client
         self._file_repository = file_repository
 
         self.device = device
         self.logger = logger
         self._translator_client = GemmaTranslationClient(self.device)
+        self.context_widows_size = context_widows_size
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts
         sentences_texts = [s.text for s in segments]
-        context = ''.join([f"speaker: {s.speaker}:\n {s.text}\n" for s in segments])
+        context = []
+        
+        source_sentence_collection = [{'speaker': s.speaker, 'text': s.text} for s in segments]
+        count_sentence = len(context)
+        for i, _ in enumerate(segments):
+            left = max(i - self.context_widows_size, 0)
+            right = min(i + self.context_widows_size, count_sentence)
+            current_context = '\n'.join([f"speaker: {segment['speaker']}:\n {segment['text']}\n" for segment in source_sentence_collection[left: right + 1]])
+            context.append(current_context)
+
+
         video_translation
         self.logger.file_logger.info(f'Step: Translate the segments')
 
@@ -55,6 +61,7 @@ class TranslationManager:
                                     speaker=s.speaker
                                 )
                             )
+
         else:
             self._translator_client.load_models()
             translations = self._translator_client.translate(sentences=sentences_texts,
@@ -77,6 +84,8 @@ class TranslationManager:
                     )
             json_segments = [{"translation": seg.translation, "text": seg.text} for seg in translated_segments]
             self.logger.log_json(file_name="translations.json", data=json_segments)
+            local_log_text = self._file_repository.get_file("translations.json")
+            self._file_repository.save_file(local_log_text)
 
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,
@@ -88,8 +97,4 @@ class TranslationManager:
             translated_texts=translated_segments,
             processed_video=video_translation.processed_video,
         )
-        self._api_client.update_video(self.public_id,
-                                      new_video_translation,
-                                      progress=60,
-                                      status=ProcessStatus.translation_ready)
         return new_video_translation

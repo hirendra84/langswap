@@ -1,9 +1,0 @@
-video_path: ./translate_video/input_videos/How does microwave work.mp4
-seconds_start: 0
-seconds_end: 0
-target_lang: "EN-US"
-tts_sample_rate: 44100
-
-translated_video_folder: ./translate_video/output_videos
-temp_dir: ./check_folder_micro
-elevenlabs_api_key: f805d6de7a8d5d6f7c0341e62b24b98a

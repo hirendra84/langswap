@@ -1,1 +1,0 @@
-import src.pipeline_models.celery_serializer_ext

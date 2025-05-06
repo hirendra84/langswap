@@ -1,7 +1,10 @@
 import attr
-from dataclasses import dataclass, field
+import json
+
 from pathlib import Path
+from dataclasses import dataclass, field, asdict
 from typing import List, Tuple, Union, Dict, Literal
+
 
 @attr.s(auto_attribs=True)
 class RemoteFile:
@@ -59,7 +62,37 @@ class TranslationPipelineConfig:
     eleven_api_token: str = field(default=None)
     watermark: bool = field(default=False)
 
+
+
+
+def save_config_to_json(config: TranslationPipelineConfig, file_path: Union[Path, str]):
+
+    config_dict = asdict(config)
+    
+    for field in ['source_video_path', 'base_dir']:
+        if field in config_dict and isinstance(config_dict[field], Path):
+            config_dict[field] = str(config_dict[field])
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(config_dict, f, indent=4)
+
+
+def load_config_from_json(file_path: Union[Path, str]) -> TranslationPipelineConfig:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        config_dict = json.load(f)
+    
+    for field in ['source_video_path', 'base_dir']:
+        if field in config_dict:
+            config_dict[field] = Path(config_dict[field])
+    
+    return TranslationPipelineConfig(**config_dict)
+
+
 @dataclass
 class TraslationUpdate:
     index: int
     text: str
+    
+    @classmethod
+    def from_pairs(cls, pairs: List[Tuple[int, str]]) -> List['TranslationUpdate']:
+        return [cls(index=index, text=text) for index, text in pairs]

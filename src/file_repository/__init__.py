@@ -1,5 +1,6 @@
 import io
 from abc import ABC
+from syslog import LOG_DEBUG
 from dotenv import load_dotenv
 
 import boto3
@@ -8,12 +9,35 @@ import os.path
 import urllib.request
 import requests
 from src.pipeline_models.models import RemoteFile
-from src.settings import LOCAL_DEBUG
-
+from typing import List
 import os
+from pathlib import Path
 
 load_dotenv()
 BUCKET = os.getenv('BUCKET', 'debug-bucket-langswap-bucket')
+
+
+
+def download_s3_directory(s3_client, bucket_name, s3_prefix, local_dir):
+
+    
+    os.makedirs(local_dir, exist_ok=True)
+    
+    paginator = s3_client.get_paginator('list_objects_v2')
+    pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_prefix)
+    
+    for page in pages:
+        if 'Contents' in page:
+            for obj in page['Contents']:
+                key = obj['Key']
+                relative_path = os.path.relpath(key, s3_prefix)
+                local_path = os.path.join(local_dir, relative_path)
+                
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                
+                if not key.endswith('/'):
+                    s3_client.download_file(bucket_name, key, local_path)
+
 
 
 class FileRepository(ABC):
@@ -40,6 +64,11 @@ class FileRepository(ABC):
         ...
 
     def subdir(self, dir_name: str) -> str:
+        """ Creates folder self.directory / dir_name.
+        :returns: new folder path"""
+        ...
+    
+    def save_dir(self, dir_name: str) -> List[RemoteFile]:
         """ Creates folder self.directory / dir_name.
         :returns: new folder path"""
         ...
@@ -138,6 +167,20 @@ class RemoteFileRepository(FileRepository):
         os.makedirs(new_dir, exist_ok=True)
         return new_dir
 
+    def save_dir(self, dir_name):
+        # print(dir_name)
+        #list_files = list(map(lambda x: str(x).replace(dir_name, ""), Path(dir_name).rglob("*.*")))
+        list_files = list(map(str, Path(dir_name).rglob("*.*")))
+        remove_file_collection = []
+        for file_name in list_files:
+            # print(file_name, self._directory)
+            local_file = RemoteFile(
+                name=file_name,
+                file_path=file_name, #os.path.join(self._directory, file_name)
+            )
+            remote_file = self.save_file(local_file)
+            remove_file_collection.append(remote_file)
+        return list_files
 
 class LocalFileRepository(FileRepository):
     _directory: str
@@ -246,8 +289,17 @@ class LocalFileRepository(FileRepository):
         os.makedirs(new_dir, exist_ok=True)
         return new_dir
 
-
-if LOCAL_DEBUG:
-    file_repo_klass = LocalFileRepository
-else:
-    file_repo_klass = RemoteFileRepository
+    def save_dir(self, dir_name):
+        #list_files = list(map(lambda x: str(x).replace(dir_name, ""), Path(dir_name).rglob("*.*")))
+        #list_files = list(map(str, Path(dir_name).rglob("*.*")))
+        list_files = list(map(str, Path(dir_name).rglob("*.*")))
+        remove_file_collection = []
+        for file_name in list_files:
+            #print(file_name, self._directory)
+            local_file = RemoteFile(
+                name=file_name,
+                file_path=file_name, #os.path.join(self._directory, file_name)
+            )
+            remote_file = self.save_file(local_file)
+            remove_file_collection.append(remote_file)
+        return list_files
