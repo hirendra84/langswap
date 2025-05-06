@@ -114,11 +114,13 @@ class TextToSpeechManager:
                                             splitted_audio_folder,
                                             sample_rate=self.tts_sample_rate,
                                             )
+        self._file_repository.save_dir(self._file_repository.subdir('splitted_audio'))
         
         if enhance:
             self.logger.file_logger.info("Step: resampling pipeline on splitted audio")
             enhanced_audio_folder = self._file_repository.subdir("enhanced_audio")
             video_translation = db_manager.enhance_pipeline(video_translation, enhanced_audio_folder)
+            self._file_repository.save_dir(self._file_repository.subdir('enhanced_audio'))
         
 
         self.logger.file_logger.info("Step: text to speech basic pipeline")
@@ -127,6 +129,7 @@ class TextToSpeechManager:
                     video_translation,
                     generated_audio_folder,
                     language=target_lang)
+        self._file_repository.save_dir(self._file_repository.subdir('generated_audio'))
         
         if voice_conv:
             self.logger.file_logger.info("Step: voice cloning pipeline")
@@ -137,6 +140,7 @@ class TextToSpeechManager:
                     styled_audio_folder,
                     source_lang=source_lang
                 )
+            self._file_repository.save_dir(self._file_repository.subdir('styled_audio'))
         
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,

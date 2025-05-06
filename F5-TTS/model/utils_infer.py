@@ -37,7 +37,7 @@ def load_vocoder(is_local=False, local_path="", device=device):
         vocos = Vocos.from_pretrained("charactr/vocos-mel-24khz")
     return vocos
 
-vocos = load_vocoder(is_local=True, local_path="./models_weights/vocos-mel-24khz")
+#vocos = load_vocoder(is_local=True, local_path="./models_weights/vocos-mel-24khz")
 
 
 # -----------------------------------------
@@ -196,6 +196,7 @@ def infer_process(
     ref_text,
     gen_text,
     model_obj,
+    vocos,
     show_info=print,
     progress=tqdm,
     target_rms=target_rms,
@@ -219,6 +220,7 @@ def infer_process(
         ref_text,
         gen_text_batches,
         model_obj,
+        vocos=vocos,
         progress=progress,
         target_rms=target_rms,
         cross_fade_duration=cross_fade_duration,
@@ -239,6 +241,7 @@ def infer_batch_process(
     ref_text,
     gen_text_batches,
     model_obj,
+    vocos,
     progress=tqdm,
     target_rms=0.1,
     cross_fade_duration=0.15,

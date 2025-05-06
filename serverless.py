@@ -1,6 +1,6 @@
 import sys
 import runpod
-from main import process_translation, test_video_translation_local
+from main import process_translation, test_video_translation_local, process_update_translation
 
 def handler(job):
     """RunPod serverless handler that uses main.py functionality"""
@@ -13,6 +13,8 @@ def handler(job):
             runpod.serverless.progress_update(job, message)
     
     # Call the shared process_translation function
+    if "update_request" in input:
+        process_update_translation(input, progress_callback)
     return process_translation(input, progress_callback)
 
 if __name__ == '__main__':

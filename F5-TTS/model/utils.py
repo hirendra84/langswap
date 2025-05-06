@@ -611,7 +611,7 @@ def load_checkpoint(model, ckpt_path, device, use_ema=True):
             for k, v in checkpoint["ema_model_state_dict"].items()
             if k not in ["initted", "step"]
         }
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
     else:
         if ckpt_type == "safetensors":
             checkpoint = {"model_state_dict": checkpoint}
