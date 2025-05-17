@@ -5,7 +5,7 @@ from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
 from src.file_repository import FileRepository
 
 
-from src.ml.translation_service.translator_client import TranslatorClient, GemmaTranslationClient, QuantizedGemmaTranslationClient, QwenTranslationClient, YandexTranslationClient
+from src.ml.translation_service.translator_client import TranslatorClient, QuantizedGemmaTranslationClient
 
 
 logger = getLogger(__name__)
@@ -17,27 +17,19 @@ class TranslationManager:
     _translator_client: TranslatorClient
     _file_repository: FileRepository
 
-    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger, context_widows_size: int = 10):
+    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger):
         self.public_id = public_id
         self._file_repository = file_repository
 
         self.device = device
         self.logger = logger
         self._translator_client = QuantizedGemmaTranslationClient(self.device)
-        self.context_widows_size = context_widows_size
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts
         sentences_texts = [s.text for s in segments]
-        context = []
         
         source_sentence_collection = [{'speaker': s.speaker, 'text': s.text} for s in segments]
-        count_sentence = len(context)
-        for i, _ in enumerate(segments):
-            left = max(i - self.context_widows_size, 0)
-            right = min(i + self.context_widows_size, count_sentence)
-            current_context = '\n'.join([f"speaker: {segment['speaker']}:\n {segment['text']}\n" for segment in source_sentence_collection[left: right + 1]])
-            context.append(current_context)
 
 
         video_translation
@@ -66,9 +58,8 @@ class TranslationManager:
         else:
             self._translator_client.load_models()
             translations = self._translator_client.translate(sentences=sentences_texts,
-                                                         source_lang=source_lang,
-                                                         target_lang=target_lang,
-                                                         context=context)
+                                                         source_language=source_lang,
+                                                         target_language=target_lang)
 
             translated_segments = []
             for s, t in zip(segments, translations):
