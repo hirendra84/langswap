@@ -1,3 +1,4 @@
+from importlib.util import source_hash
 import uuid
 from dotenv import load_dotenv
 import boto3
@@ -24,33 +25,6 @@ def init_s3_client():
     )
     return s3
 
-def create_videotranslate_config(source_lang, 
-                                 target_lang, 
-                                 name, 
-                                 public_id, 
-                                 num_speakers, 
-                                 tts_engine, 
-                                 file_path, 
-                                 token,
-                                 watermark
-    ):
-    config = TranslationPipelineConfig(
-        source_lang=source_lang,
-        target_lang=target_lang,
-        name=name,
-        public_id=public_id,
-        num_speakers=num_speakers,
-        source_video_path=file_path,
-        base_dir=BASE_DIR,
-        device="cuda",
-        voice_conv=False,
-        tts_model=tts_engine,
-        dubbing_algo="speedup",
-        eleven_api_token=token,
-        watermark=watermark
-    ) 
-    return config
-
 def get_file(repo, s3_url):
     remote_file = RemoteFile(
             s3_url = s3_url,
@@ -74,37 +48,34 @@ def process_translation(input, progress_callback=None):
             progress_callback(message)
         else:
             print(message)
-    
-    source_language = input.get('source_language', None)
-    target_language = input.get('target_language', "english")
-    tts_engine = input.get("tts_engine", "xtts") # xtts, f5tts, elevenlabs
-    token = input.get("token", None)
-            
-    num_speakers = input.get('count_speakers', None)
-    random_id = str(uuid.uuid4())
-    name = input.get('name', random_id)
-    public_id = input.get('public_id', random_id)
-    s3_video_url = input.get("s3_video_url")
-    watermark = input.get("watermark", True)
+
+    assert 'target_language' in input.keys(), "target language is missing from input"
+    assert 'tts_engine' in input.keys(), "tts engine is missing from input"
     
     # First progress update - Initialization
     update_progress("0% Initializing translation pipeline")
 
     s3_client = init_s3_client()
+
+    public_id = input.get('public_id', str(uuid.uuid4()))
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
-    file_path = get_file(repo, s3_video_url)
+    file_path = get_file(repo, input.get("s3_video_url"))
     
-    config = create_videotranslate_config(
-        source_language, 
-        target_language, 
-        name, 
-        public_id, 
-        num_speakers, 
-        tts_engine, 
-        file_path, 
-        token,
-        watermark
-    )
+    config = TranslationPipelineConfig(
+        source_lang=input.get('source_language', None),
+        target_lang=input.get('target_language'),
+        name=public_id,
+        public_id=public_id,
+        num_speakers=input.get('count_speakers', None),
+        source_video_path=file_path,
+        base_dir=BASE_DIR,
+        device='cuda',
+        voice_conv=False,
+        tts_model=input.get("tts_engine"),
+        dubbing_algo="speedup",
+        eleven_api_token=input.get("token", None),
+        watermark=input.get("watermark", True)
+    ) 
     
     pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
     

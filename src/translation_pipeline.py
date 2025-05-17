@@ -1,4 +1,5 @@
 import os
+from coqui.TTS.tts.layers.xtts import xtts_manager
 import torch
 import torchaudio
 
@@ -24,8 +25,6 @@ class VideoTranslationPipeline:
     def __init__(self, config: TranslationPipelineConfig, file_repository):
         self.config = config
         
-
-
         self._file_repository = file_repository
         config_file = os.path.join(self._file_repository.directory, "config.json")
         save_config_to_json(config, config_file)
@@ -35,7 +34,7 @@ class VideoTranslationPipeline:
 
         file = RemoteFile(
             file_path=self.config.source_video_path,
-            name=self.config.name
+            name=self.config.public_id
         )
 
         self.logger = Logger(directory=self._file_repository.directory)
@@ -45,9 +44,11 @@ class VideoTranslationPipeline:
         self.audio_extensions = ["mp3", "wav"]
    
     def _generate_asr(self):
-        stt_manager = SpeechToTextManager(self.config.public_id, self._file_repository, device=self.config.device, logger=self.logger)
-        self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers, lang=self.config.source_lang)
-        if self.config.source_lang == None:
+        print("initializing ASR manager")
+        stt_manager = SpeechToTextManager(language=self.config.source_lang, public_id=self.config.public_id, file_repository=self._file_repository, device=self.config.device, logger=self.logger)
+        print(f"Transcribing audio file: {self.video_translation.source_file.file_path} with language: {self.config.source_lang}")
+        self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers)
+        if self.config.source_lang != None:
             self.config.source_lang = map_language_to_code(self.video_translation.source_lang_code, system="reverse_from_whisper")
         
 
@@ -89,6 +90,8 @@ class VideoTranslationPipeline:
                 self.video_translation,
                 vocals_audio
             )
+        else:
+            raise ValueError(f"Invalid merge pipeline: {merge_pipeline}. Please use one of the following: pause_based, stretch_whole, speedup.")
 
         # TODO: save correctly if need on the s3
         styled_audio = self._file_repository.get_file("styled_full_audio.wav")

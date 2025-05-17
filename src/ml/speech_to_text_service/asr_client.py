@@ -51,63 +51,9 @@ class TranscriptionDataLocal:
     output: Output
 
 
-class ASRClient:
-
-    token: str
-
-    def __init__(self, api_key: str):
-        self.token = api_key
-        
-
-    def transcribe(self, source_url: str, lang: str) -> Output:
-        lang = map_language_to_code(lang, "whisper")
-        headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "authorization": self.token,
-        }
-
-        url = "https://api.runpod.ai/v2/faster-whisper/runsync"
-        
-        payload = {
-            "input": {
-                "audio": source_url,
-                "model": "large-v2",
-                "transcription": "plain_text",
-                "translate": False,
-                "language": lang,
-                "temperature": 0,
-                "best_of": 5,
-                "beam_size": 5,
-                "patience": 1,
-                "suppress_tokens": "-1",
-                "condition_on_previous_text": False,
-                "temperature_increment_on_fallback": 0.2,
-                "compression_ratio_threshold": 2.4,
-                "logprob_threshold": -1,
-                "no_speech_threshold": 0.6,
-                "word_timestamps": True,
-            },
-            "enable_vad": False,
-        }
-
-        response = requests.post(url, json=payload, headers=headers)
-        response = response.json()
-
-        try:
-            return cattrs.structure(response, TranscriptionData).output
-        except Exception:
-            print(response)
-            if "error" in response and response["error"] == "failed to add to queue":
-                print("Retryable error, retrying...")
-                sleep(5)
-                self.transcribe(source_url)
-            raise
-
-
 class ASRX:
 
-    def __init__(self, device) -> None:
+    def __init__(self, device, language) -> None:
         # Get the project root directory (3 levels up from current file)
         # This assumes the file is at src/ml/speech_to_text_service/asr_client.py
         current_file_dir = Path(os.path.dirname(os.path.abspath(__file__)))
@@ -121,6 +67,10 @@ class ASRX:
         self.model_path_whisper = "distil-large-v3"
 
         self.model = None
+        if language is not None:
+            self.language = map_language_to_code(language, system="whisper")
+        else:
+            self.language = None
         self.diarize_model = None
 
         # Diarization model path
@@ -155,7 +105,8 @@ class ASRX:
             self.model_path_whisper, 
             device=self.device, 
             compute_type=compute_type, 
-            local_files_only=False
+            local_files_only=False,
+            language=self.language
         )
         cwd = Path.cwd().resolve() 
         cd_to = Path(self.model_path_diarization).parent.parent.resolve()
@@ -170,21 +121,16 @@ class ASRX:
         """Returns the models_weights directory path"""
         return MODEL_WEIGHTS_DIR  # Go up to models_weights
 
-    def transcribe(self, source_file: str, lang=None, num_speakers=None) -> Output:
-        language = None
-        if lang != None:
-            language = map_language_to_code(lang, system="whisper")
-        
+    def transcribe(self, source_file: str, num_speakers=None) -> Output:
         audio = whisperx.load_audio(source_file)
         
         response = self.model.transcribe(
             audio, 
-            language=language, 
+            language=self.language, 
             batch_size=8
         )
 
         language = response["language"]
-        lang = language
         
         model_a, metadata = whisperx.load_align_model(
             language_code=response["language"], 
