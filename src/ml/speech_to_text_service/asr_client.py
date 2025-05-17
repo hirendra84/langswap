@@ -64,7 +64,7 @@ class ASRX:
         
         # Whisper model path
         # whisper_model_dir = models_base_dir / "whisper-large-v3"
-        self.model_path_whisper = "distil-large-v3"
+        self.model_path_whisper = "large-v3"
 
         self.model = None
         if language is not None:
