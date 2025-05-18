@@ -67,9 +67,13 @@ class VideoTranslationPipeline:
                                           device=self.config.device, 
                                           tts_name = self.config.tts_model,
                                           logger=self.logger, 
-                                          tts_sample_rate=24000, 
+                                        #   tts_sample_rate=44100, 
                                           eleven_api_token=self.config.eleven_api_token)
-        self.video_translation = tts_manager.synthesize(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang, voice_conv=self.config.voice_conv, enhance=True)
+        self.video_translation = tts_manager.synthesize(self.video_translation, 
+                                                        source_lang=self.config.source_lang, 
+                                                        target_lang=self.config.target_lang, 
+                                                        voice_conv=self.config.voice_conv, 
+                                                        enhance=True)
     
     def _merge(self, merge_pipeline="stretch_whole"):
         video_dubbing_manager = VideoDubbingManager(self._file_repository, self.logger)

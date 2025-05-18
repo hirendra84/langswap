@@ -11,6 +11,7 @@ from src.ml.text_to_speech_service.tts_client import TTSClient
 from src.ml.text_to_speech_service.tts_xtts_client import XTTSClient
 from src.ml.text_to_speech_service.tts_f5_client import FlowClient
 from src.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
+from src.ml.text_to_speech_service.tts_fish_speech_client import FishSpeechClient
 from src.ml.text_to_speech_service.voice_converter import VoiceToneConverter
 from src.utils.ml_processing.lang2code_mapper import map_language_to_code
 
@@ -23,7 +24,7 @@ class TextToSpeechManager:
     # pass it
     _tts_client: TTSClient
     _file_repository: FileRepository
-    tts_sample_rate: int = 24_000
+    tts_sample_rate: int
     audio_dubbing_manager: AudioDubbingManager
 
     def __init__(self, 
@@ -36,13 +37,15 @@ class TextToSpeechManager:
         self.public_id = public_id
         self._file_repository = file_repository
 
-        self.tts_sample_rate = tts_sample_rate
+       
 
         self.audio_dubbing_manager = AudioDubbingManager(file_repository, device=device)
         
         self._tts_client = None
         self.eleven_api_token = eleven_api_token
         self.choose_tts_client(tts_name, file_repository, device)
+        
+        self.tts_sample_rate = self._tts_client.sample_rate
 
         model_path = os.path.abspath("./voice_conv/OpenVoiceV2")
         self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder=model_path,
@@ -62,7 +65,11 @@ class TextToSpeechManager:
         language = map_language_to_code(target_lang, "whisper")
         
         self._tts_client.generate_audio(
-            segment.translation, segment.source_file, file_path, language
+            text=segment.translation, 
+            source_audio_file=segment.source_file,
+            source_text=segment.text, 
+            save_path=file_path,
+            language=language
         )
         segment.generated_file = file_path
         if voice_conv:
@@ -94,6 +101,8 @@ class TextToSpeechManager:
     def choose_tts_client(self, name: str, file_repository, device):
         if name == "xtts":
             self._tts_client = XTTSClient(file_repository=file_repository, device=device)
+        if name == "fish":
+            self._tts_client = FishSpeechClient(file_repository=file_repository, device=device)
         elif name == "elevenlabs":
             self._tts_client = ElevenTTSClient(self.eleven_api_token)
         elif name == "f5tts":

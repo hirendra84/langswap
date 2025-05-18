@@ -33,6 +33,7 @@ class FlowClient:
         # TODO: change all the paths to relative
         #self.config = tomli.load(open(config_path, "rb"))
         self.vocab_file = vocab_file
+        self.sample_rate = 24000
 
         # where do we use vocos?
         self.vocos = load_vocoder(is_local=True, local_path=vocos_local_path)

@@ -19,6 +19,7 @@ class XTTSClient:
         device="cuda",
     ):
         self.device = device
+        self.sample_rate = 24000
 
         self.tts_model_path = os.path.abspath(tts_model_path)
         self.config_path = os.path.join(tts_model_path, "config.json")
@@ -39,7 +40,7 @@ class XTTSClient:
         self.model = None
 
     def generate_audio(
-        self, text: str, source_audio_path: str, save_path: str, language: str
+        self, text: str, source_audio_file: str, source_text: str, save_path: str, language: str
     ):
         """
         Generates audio without voice conversion.
@@ -47,7 +48,7 @@ class XTTSClient:
         self.model.tts_to_file(
             text=text,
             file_path=save_path,
-            speaker_wav=source_audio_path,
+            speaker_wav=source_audio_file,
             language=language,
             enable_text_splitting=False,
             repetition_penalty=2.0,

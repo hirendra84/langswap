@@ -12,6 +12,7 @@ class ElevenTTSClient:
 
     def __init__(self, eleven_api_token):
         self.client = ElevenLabs(api_key=eleven_api_token)  # MOVE HIDDEN ELEVEN_API_KEY
+        self.sample_rate = 24000
 
     def clone_voice(self, video_translation, voice_descr: str = "", voice_name=""):
         audio_files_source = []
@@ -25,7 +26,7 @@ class ElevenTTSClient:
         
         return voice
 
-    def generate_audio(self, text: str, voice, save_path: str):
+    def generate_audio(self, text: str, source_text, voice, save_path: str):
         audio = self.client.generate(text=text, voice=voice)
         save(audio, save_path)
 
