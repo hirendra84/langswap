@@ -21,7 +21,7 @@ class TranslatorClient(ABC):
 
 
 class QuantizedGemmaTranslationClient(TranslatorClient):
-    def __init__(self, device="cuda", model_path="./models_weights/gemma-3-12b-it-Q4_K_M.gguf", n_gpu_layers=-1):
+    def __init__(self, device="cuda", model_path="./models_weights/gemma-3-27b-it-q4_0.gguf", n_gpu_layers=-1):
         super().__init__(device)
         self.model_path = model_path
         self.n_gpu_layers = n_gpu_layers  # -1 means use all available GPU layers

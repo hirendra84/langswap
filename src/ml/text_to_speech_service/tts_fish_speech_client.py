@@ -286,4 +286,4 @@ class FishSpeechClient(TTSClient):
             else:
                  video_translation.translated_texts[idx].generated_file = str(file_path)
                  logger.info(f"Audio file {file_path} already exists for segment {idx}. Skipping generation.")
-        return video_translation.translated_texts # Ensure it returns the list of segments
+        return video_translation

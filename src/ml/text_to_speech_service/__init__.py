@@ -94,9 +94,7 @@ class TextToSpeechManager:
                     output_path=audio_save_path,
                 )
                 segment.generated_file = audio_save_path
-            
-            
-    
+
     
     def choose_tts_client(self, name: str, file_repository, device):
         if name == "xtts":
@@ -107,7 +105,8 @@ class TextToSpeechManager:
             self._tts_client = ElevenTTSClient(self.eleven_api_token)
         elif name == "f5tts":
             self._tts_client = FlowClient()
-        
+
+
     def synthesize(self, video_translation: VideoTranslation, source_lang: str, target_lang: str, voice_conv=False, enhance=False) -> VideoTranslation:
 
         vocals_audio = video_translation.background_audio["vocals.wav"]
@@ -152,7 +151,7 @@ class TextToSpeechManager:
             self._file_repository.save_dir(self._file_repository.subdir('styled_audio'))
         
         new_video_translation = VideoTranslation(
-            public_id=video_translation.public_id,
+            public_id=self.public_id,
             source_file=video_translation.source_file,
             extracted_audio=video_translation.extracted_audio,
             background_audio=video_translation.background_audio,
