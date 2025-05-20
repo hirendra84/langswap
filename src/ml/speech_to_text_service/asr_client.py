@@ -59,17 +59,11 @@ class TranscriptionDataLocal:
 class ASRX:
 
     def __init__(self, device, language) -> None:
-        # Get the project root directory (3 levels up from current file)
-        # This assumes the file is at src/ml/speech_to_text_service/asr_client.py
         current_file_dir = Path(os.path.dirname(os.path.abspath(__file__)))
         project_root = current_file_dir.parents[2]  # Go up 3 levels to reach project root
-        
-        # Define base directory for models relative to project root
+
         models_base_dir = project_root / "models_weights"
-        
-        # Whisper model path
-        # whisper_model_dir = models_base_dir / "whisper-large-v3"
-        self.model_path_whisper = "large-v3"
+        self.model_path_whisper = models_base_dir / "faster-whisper-large-v3"
 
         self.model = None
         if language is not None:
@@ -81,10 +75,6 @@ class ASRX:
         # Diarization model path
         diarize_model_dir = models_base_dir / "pyannote/pyannote_diarization_config.yaml"#models_base_dir / "pyannote" / "models--pyannote--speaker-diarization-3.1" / "snapshots" / "84fd25912480287da0247647c3d2b4853cb3ee5d" / "config.yaml"
         self.model_path_diarization = str(diarize_model_dir.resolve())
-        
-        # Verify model paths exist
-        # if not os.path.exists(self.model_path_whisper):
-        #     raise FileNotFoundError(f"Whisper model not found at: {self.model_path_whisper}")
         
         if not os.path.exists(self.model_path_diarization):
             raise FileNotFoundError(f"Diarization model not found at: {self.model_path_diarization}")
@@ -102,15 +92,13 @@ class ASRX:
         self.diarize_model = None
 
     def load_models(self):
-        # For int8 models
         compute_type = "int8" if self.device != "cpu" else "float32"
         
-        # Consider medium-int8 for good balance of speed and accuracy
         self.model = whisperx.load_model(
-            self.model_path_whisper, 
+            str(self.model_path_whisper), 
             device=self.device, 
             compute_type=compute_type, 
-            local_files_only=False,
+            local_files_only=True,
             language=self.language
         )
         cwd = Path.cwd().resolve() 
