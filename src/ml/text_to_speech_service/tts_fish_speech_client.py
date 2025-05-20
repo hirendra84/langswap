@@ -14,10 +14,8 @@ from tqdm import tqdm # Changed from tqdm.auto to just tqdm for consistency
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../../fish-speech"))
 
 # Direct imports from fish_speech submodules
-from fish_speech.inference_engine import TTSInferenceEngine
-from fish_speech.models.text2semantic.inference import launch_thread_safe_queue
-from fish_speech.models.vqgan.inference import load_model as load_decoder_model
-from fish_speech.utils.schema import ServeTTSRequest, ServeReferenceAudio
+from fish_speech.lib import Pipeline # New import
+from fish_speech.utils.schema import ServeReferenceAudio # Kept for reference structure, though Pipeline might abstract it
 from fish_speech.utils.file import AUDIO_EXTENSIONS
 
 from src.file_repository import FileRepository # Already present
@@ -36,117 +34,51 @@ class FishSpeechClient(TTSClient):
         file_repository: FileRepository,
         llama_checkpoint_path: str | Path = "./models_weights/fish-speech-1.5",
         decoder_checkpoint_path: str | Path = "./models_weights/fish-speech-1.5/firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
-        decoder_config_name: str = "firefly_gan_vq", # Added, crucial for load_decoder_model
         device: str = "cuda",
-        half_precision: bool = True,
-        compile_models: bool = False,
+        compile_models: bool = False, # Renamed from 'compile' for clarity with existing style
     ):
         super().__init__() # Call to base TTSClient
         self._file_repository = file_repository 
         self.device = device
-        self.sample_rate = 44100
+        self.sample_rate = 44100 # Default sample rate, confirmed by user example for Pipeline output
         
         self.llama_checkpoint_path = Path(os.path.abspath(llama_checkpoint_path))
         self.decoder_checkpoint_path = Path(os.path.abspath(decoder_checkpoint_path))
-        self.decoder_config_name = decoder_config_name
-        self.half_precision = half_precision
-        self.compile_models = compile_models
+        self.compile_models = compile_models # Changed from compile to compile_models
         
-        self.precision: Optional[torch.dtype] = None
-        self.llama_queue = None
-        self.decoder_model = None
-        self.tts_inference_engine: Optional[TTSInferenceEngine] = None
+        self.model: Optional[Pipeline] = None
         
         self.load_models()
 
     def load_models(self):
-        logger.info("Initializing FishSpeechClient models...")
-        
-        if not torch.cuda.is_available() and self.device == "cuda":
-            logger.warning("CUDA not available, falling back to CPU.")
-            self.device = "cpu"
-        elif torch.backends.mps.is_available() and self.device == "cuda": # Apple Silicon GPU
-            logger.info("MPS is available, using MPS for CUDA request.")
-            self.device = "mps"
-        
-        self.precision = torch.half if self.half_precision and self.device != "cpu" else torch.bfloat16
-        if self.device == "cpu":
-            self.precision = torch.bfloat16 # float16 not well supported on CPU
-            logger.info("Running on CPU, using bfloat16 precision.")
-        
-        logger.info(f"Using device: {self.device}, precision: {self.precision}")
+        logger.info("Initializing FishSpeechClient with fish_speech.lib.Pipeline...")
 
         if not self.llama_checkpoint_path.exists():
             raise FileNotFoundError(f"LLaMA checkpoint path not found: {self.llama_checkpoint_path}")
         if not self.decoder_checkpoint_path.exists():
             raise FileNotFoundError(f"Decoder checkpoint path not found: {self.decoder_checkpoint_path}")
 
-        try:
-            logger.info(f"Loading LLaMA model from: {self.llama_checkpoint_path}")
-            self.llama_queue = launch_thread_safe_queue(
-                checkpoint_path=self.llama_checkpoint_path,
-                device=self.device,
-                precision=self.precision,
-                compile=self.compile_models,
-            )
-
-            logger.info(f"Loading VQ-GAN decoder model from: {self.decoder_checkpoint_path}")
-            self.decoder_model = load_decoder_model(
-                config_name=self.decoder_config_name,
-                checkpoint_path=self.decoder_checkpoint_path,
-                device=self.device,
-            )
-
-            logger.info("Initializing TTSInferenceEngine...")
-            self.tts_inference_engine = TTSInferenceEngine(
-                llama_queue=self.llama_queue,
-                decoder_model=self.decoder_model,
-                precision=self.precision,
-                compile=self.compile_models,
-            )
-            logger.info("FishSpeech models and inference engine loaded. Performing warmup...")
-            self._warmup()
-            logger.info("Warmup complete.")
-
-        except FileNotFoundError as e: # Should be caught by checks above, but good practice
-            logger.error(f"Error loading FishSpeech models (FileNotFound): {e}.")
-            raise
-        except Exception as e:
-            logger.exception(f"An unexpected error occurred while loading FishSpeech models: {e}")
-            raise
-
-    def _warmup(self):
-        if not self.tts_inference_engine:
-            logger.error("TTS Inference Engine not initialized. Cannot perform warmup.")
-            return
-        try:
-            logger.info("Performing warmup with a test inference...")
-            warmup_request = ServeTTSRequest(text="Hello.", references=[], seed=42)
-            _ = list(self.tts_inference_engine.inference(warmup_request)) # Consume generator
-        except Exception as e:
-            logger.error(f"Error during warmup: {e}")
+        logger.info(f"Loading Fish Speech Pipeline...")
+        self.model = Pipeline(
+            llama_path=str(self.llama_checkpoint_path),
+            vqgan_path=str(self.decoder_checkpoint_path),
+            device=self.device,
+            compile=self.compile_models,
+        )
+        logger.info("Fish Speech Pipeline loaded successfully.")
 
     def __enter__(self):
-        if not self.tts_inference_engine:
+        if not self.model: 
             self.load_models()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         logger.info("FishSpeechClient exiting. Releasing resources...")
-        if hasattr(self, 'llama_queue') and self.llama_queue and hasattr(self.llama_queue, 'put'):
-            try:
-                self.llama_queue.put(None) 
-            except Exception as e:
-                logger.warning(f"Error signaling LLaMA queue to stop: {e}")
+        if hasattr(self, 'model'):
+            del self.model
+            self.model = None
         
-        if hasattr(self, 'decoder_model'):
-            del self.decoder_model
-            self.decoder_model = None
-        if hasattr(self, 'tts_inference_engine'):
-            del self.tts_inference_engine
-            self.tts_inference_engine = None
-        
-        if self.device in ["cuda", "mps"] and torch.cuda.is_available(): # Check MPS specific cleanup if any
+        if self.device in ["cuda", "mps"] and torch.cuda.is_available():
             torch.cuda.empty_cache()
         logger.info("FishSpeechClient resources released.")
 
@@ -156,31 +88,22 @@ class FishSpeechClient(TTSClient):
         source_audio_file: str, 
         source_text: str, 
         save_path: str,
-        language: Optional[str] = None,
-        output_format: str = "wav", # For ServeTTSRequest, actual save format is WAV via soundfile
+        language: Optional[str] = None, 
         chunk_length: int = 200,
         top_p: float = 0.7,
-        repetition_penalty: float = 1.2,
+        repetition_penalty: float = 1.5, 
         temperature: float = 0.7,
-        seed: Optional[int] = None,
-        max_new_tokens: int = 1024,
+        seed: Optional[int] = None, 
+        max_new_tokens: int = 1024, 
     ) -> bool:
-        if not self.tts_inference_engine:
-            logger.error("FishSpeech model is not loaded. Cannot generate audio.")
-            return False
-
         if not source_text or not source_text.strip():
             logger.error(f"Source audio text is missing or empty for source audio {source_audio_file}. FishSpeech requires this for voice cloning.")
             return False
-        
-        logger.info(f"Generating audio for text: '{text[:50]}...' with source audio: {source_audio_file}")
-        if language:
-            logger.debug(f"Language hint: {language} (FishSpeech infers from model/text)")
+
 
         source_audio_path_obj = Path(source_audio_file)
         if not source_audio_path_obj.exists():
-            logger.error(f"Source audio path not found: {source_audio_path_obj}")
-            return False
+            raise FileNotFoundError(f"Source audio path not found: {source_audio_path_obj}")
         
         if source_audio_path_obj.suffix.lower() not in AUDIO_EXTENSIONS:
             logger.warning(
@@ -188,56 +111,30 @@ class FishSpeechClient(TTSClient):
                 f"which may not be ideal. Supported audio types are typically: {AUDIO_EXTENSIONS}"
             )
 
-        try:
-            with open(source_audio_path_obj, "rb") as f:
-                audio_bytes = f.read()
-        except Exception as e:
-            logger.error(f"Error reading source audio file {source_audio_path_obj}: {e}")
-            return False
-
-        reference_audio = ServeReferenceAudio(audio=audio_bytes, text=source_text)
-        request = ServeTTSRequest(
+        logger.info(f"Making reference from audio: {source_audio_file} and text: '{source_text[:30]}...'")
+        reference_speaker = self.model.make_reference(str(source_audio_path_obj), source_text)
+        
+        logger.info("Generating waveform...")
+        final_audio_data = self.model.generate(
             text=text,
-            references=[reference_audio],
-            format=output_format, 
+            references=reference_speaker,
             chunk_length=chunk_length,
             top_p=top_p,
-            repetition_penalty=repetition_penalty,
+            repetition_penalty=repetition_penalty, 
             temperature=temperature,
             seed=seed,
             max_new_tokens=max_new_tokens,
-        )
+        ) 
         
-        final_audio_data = None
-        audio_sample_rate = None
-
-        try:
-            for result in self.tts_inference_engine.inference(request):
-                if result.code == "error":
-                    logger.error(f"TTS Inference error from engine: {result.error}")
-                    return False
-                elif result.code == "final" and result.audio is not None:
-                    audio_sample_rate, final_audio_data = result.audio
-                    logger.info(f"Inference successful. Audio duration: {len(final_audio_data) / audio_sample_rate:.2f}s")
-                    break 
-            
-            if final_audio_data is None or audio_sample_rate is None:
-                logger.error("No final audio data received from inference engine.")
-                return False
-
-            sf.write(str(save_path), final_audio_data, audio_sample_rate)
-            logger.info(f"Generated audio saved to {save_path}")
-            return True
-
-        except Exception as e:
-            logger.exception(f"An unexpected error occurred during TTS inference or saving: {e}")
+        if final_audio_data is None: 
+            logger.error("No audio data received from inference engine.")
             return False
 
-    def tts_pipeline(self, video_translation, temp_folder: str, language: str = "en") -> List[TranslatedTextedSegment]:
-        if not self.tts_inference_engine:
-            logger.error("FishSpeech model is not loaded. Cannot run TTS pipeline.")
-            return video_translation.translated_texts # Return the original list
+        sf.write(str(save_path), final_audio_data, self.sample_rate)
+        logger.info(f"Generated audio saved to {save_path}")
+        return True
 
+    def tts_pipeline(self, video_translation, temp_folder: str, language: str = "en") -> List[TranslatedTextedSegment]:
         Path(temp_folder).mkdir(parents=True, exist_ok=True)
         
         for idx, segment in enumerate(
@@ -255,10 +152,8 @@ class FishSpeechClient(TTSClient):
                     video_translation.translated_texts[idx].generated_file = None
                     continue
                 
-                # FishSpeech requires the transcript of the source audio.
-                # 'segment.text' is assumed to be the original transcript for voice cloning.
                 source_text_for_cloning = getattr(segment, 'text', None) 
-                if not source_text_for_cloning: # Fallback if 'text' attribute is not present
+                if not source_text_for_cloning: 
                      source_text_for_cloning = getattr(segment, 'source_text', None)
 
                 if not source_text_for_cloning:
@@ -275,8 +170,8 @@ class FishSpeechClient(TTSClient):
                     text=segment.translation,
                     source_audio_file=segment.source_file,
                     source_text=source_text_for_cloning,
-                    save_path=file_path,
-                    language=language
+                    save_path=str(file_path), 
+                    language=language,
                 )
                 
                 if success:

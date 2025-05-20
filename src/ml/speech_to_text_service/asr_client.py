@@ -6,6 +6,11 @@ import json
 from dotenv import load_dotenv
 from pathlib import Path
 
+# Set HuggingFace cache directory to models_weights/
+current_file_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+project_root = current_file_dir.parents[2]
+os.environ["HF_HOME"] = str(project_root / "models_weights")
+os.environ["TRANSFORMERS_CACHE"] = str(project_root / "models_weights")
 
 import whisperx
 import attr
