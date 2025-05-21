@@ -2,7 +2,10 @@ import sys
 import os
 from pathlib import Path
 import logging
-from typing import Optional, List # Added List for type hinting
+from typing import Optional, List
+import uuid # Added for unique temporary file naming
+
+from more_itertools import run_length # Added List for type hinting
 
 import torch
 import numpy as np
@@ -29,13 +32,30 @@ os.environ["EINX_FILTER_TRACEBACK"] = "false"
 
 
 class FishSpeechClient(TTSClient):
+    ACCENT_REMOVAL_PREFIXES = {
+        "en": "Let me say it without an accent: ",
+        "zh": "让我无口音地说: ",  # Chinese (Simplified)
+        "ja": "アクセントなしで言います: ",  # Japanese
+        "de": "Lass es mich ohne Akzent sagen: ",  # German
+        "fr": "Laissez-moi le dire sans accent: ",  # French
+        "es": "Déjame decirlo sin acento: ",  # Spanish
+        "ko": "억양 없이 말할게요: ",  # Korean
+        "ar": "دعني أقولها بدون لهجة: ",  # Arabic
+        "ru": "Скажу без акцента: ",  # Russian
+        "nl": "Laat het me zonder accent zeggen: ",  # Dutch
+        "it": "Lascia che lo dica senza accento: ",  # Italian
+        "pl": "Pozwól, że powiem to bez akcentu: ",  # Polish
+        "pt": "Deixe-me dizer isso sem sotaque: ",  # Portuguese
+    }
+    DEFAULT_ACCENT_REMOVAL_PREFIX = ACCENT_REMOVAL_PREFIXES["en"]
+
     def __init__(
         self,
         file_repository: FileRepository,
         llama_checkpoint_path: str | Path = "./models_weights/fish-speech-1.5",
         decoder_checkpoint_path: str | Path = "./models_weights/fish-speech-1.5/firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
         device: str = "cuda",
-        compile_models: bool = False, # Renamed from 'compile' for clarity with existing style
+        compile_models: bool = True, # Renamed from 'compile' for clarity with existing style
     ):
         super().__init__() # Call to base TTSClient
         self._file_repository = file_repository 
@@ -88,7 +108,7 @@ class FishSpeechClient(TTSClient):
         source_audio_file: str, 
         source_text: str, 
         save_path: str,
-        language: Optional[str] = None, 
+        language: Optional[str] = "en", # Defaulting to 'en' for prefix lookup
         chunk_length: int = 200,
         top_p: float = 0.7,
         repetition_penalty: float = 1.5, 
@@ -96,43 +116,90 @@ class FishSpeechClient(TTSClient):
         seed: Optional[int] = None, 
         max_new_tokens: int = 1024, 
     ) -> bool:
+        if not self.model:
+            logger.error("Model not loaded. Call load_models() first or use a context manager.")
+            return False
+
         if not source_text or not source_text.strip():
             logger.error(f"Source audio text is missing or empty for source audio {source_audio_file}. FishSpeech requires this for voice cloning.")
             return False
 
-
         source_audio_path_obj = Path(source_audio_file)
         if not source_audio_path_obj.exists():
-            raise FileNotFoundError(f"Source audio path not found: {source_audio_path_obj}")
+            logger.error(f"Source audio file not found: {source_audio_file}")
+            return False
         
-        if source_audio_path_obj.suffix.lower() not in AUDIO_EXTENSIONS:
-            logger.warning(
-                f"Source audio file {source_audio_path_obj} has extension '{source_audio_path_obj.suffix}', "
-                f"which may not be ideal. Supported audio types are typically: {AUDIO_EXTENSIONS}"
+        save_path_obj = Path(save_path)
+        temp_intermediate_audio_path = save_path_obj.parent / f"intermediate_{uuid.uuid4()}.wav"
+
+        try:
+            # === Stage 1: Generate intermediate audio with accent removal prompt ===
+            logger.info(f"Stage 1: Making initial reference (ref1) from audio: {source_audio_file} and text: '{source_text[:30]}...'")
+            ref1 = self.model.make_reference(str(source_audio_path_obj), source_text)
+
+            # Select language-specific prefix, default to English if not found or language is None
+            current_language_key = language.lower() if language else "en"
+            accent_removal_prefix = self.ACCENT_REMOVAL_PREFIXES.get(current_language_key, self.DEFAULT_ACCENT_REMOVAL_PREFIX)
+            
+            text_for_stage1_generation = accent_removal_prefix + text
+            
+            logger.info(f"Stage 1: Generating intermediate audio for language '{current_language_key}' with prompt: '{text_for_stage1_generation[:50]}...'")
+            
+            intermediate_audio_data = self.model.generate(
+                text=text_for_stage1_generation,
+                references=ref1,
+                chunk_length=chunk_length, 
+                top_p=top_p,
+                repetition_penalty=repetition_penalty, 
+                temperature=0.2,
+                seed=seed,
+                max_new_tokens=max_new_tokens,
             )
 
-        logger.info(f"Making reference from audio: {source_audio_file} and text: '{source_text[:30]}...'")
-        reference_speaker = self.model.make_reference(str(source_audio_path_obj), source_text)
-        
-        logger.info("Generating waveform...")
-        final_audio_data = self.model.generate(
-            text=text,
-            references=reference_speaker,
-            chunk_length=chunk_length,
-            top_p=top_p,
-            repetition_penalty=repetition_penalty, 
-            temperature=temperature,
-            seed=seed,
-            max_new_tokens=max_new_tokens,
-        ) 
-        
-        if final_audio_data is None: 
-            logger.error("No audio data received from inference engine.")
-            return False
+            if intermediate_audio_data is None:
+                logger.error("Stage 1: No audio data received from inference engine for intermediate audio.")
+                return False
 
-        sf.write(str(save_path), final_audio_data, self.sample_rate)
-        logger.info(f"Generated audio saved to {save_path}")
-        return True
+            sf.write(str(temp_intermediate_audio_path), intermediate_audio_data, self.sample_rate)
+            logger.info(f"Stage 1: Intermediate audio saved to {temp_intermediate_audio_path}")
+
+            # === Stage 2: Generate final audio using original and intermediate references ===
+            logger.info(f"Stage 2: Making second reference (ref2) from intermediate audio: {temp_intermediate_audio_path} and original text: '{text[:30]}...'")
+            ref2 = self.model.make_reference(str(temp_intermediate_audio_path), text) 
+            
+            logger.info("Stage 2: Generating final waveform using ref1 and ref2...")
+            final_audio_data = self.model.generate(
+                text=text, 
+                references=[ref1, ref2], 
+                chunk_length=chunk_length, 
+                top_p=top_p,
+                repetition_penalty=repetition_penalty, 
+                temperature=0.5,
+                seed=seed, 
+                max_new_tokens=max_new_tokens,
+            )
+            
+            if final_audio_data is None: 
+                logger.error("Stage 2: No audio data received from inference engine for final audio.")
+                # Clean up before returning False, as 'finally' block won't be reached if we return here.
+                # However, the finally block will execute on function exit regardless of how it exits (return, exception).
+                return False
+
+            sf.write(str(save_path_obj), final_audio_data, self.sample_rate)
+            logger.info(f"Stage 2: Final generated audio saved to {save_path_obj}")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error during two-stage TTS generation: {e}", exc_info=True)
+            return False
+        finally:
+            # Clean up the temporary intermediate audio file
+            if temp_intermediate_audio_path.exists():
+                try:
+                    os.remove(temp_intermediate_audio_path)
+                    logger.info(f"Cleaned up temporary file: {temp_intermediate_audio_path}")
+                except OSError as e_os:
+                    logger.error(f"Error deleting temporary file {temp_intermediate_audio_path}: {e_os}")
 
     def tts_pipeline(self, video_translation, temp_folder: str, language: str = "en") -> List[TranslatedTextedSegment]:
         Path(temp_folder).mkdir(parents=True, exist_ok=True)
@@ -145,6 +212,7 @@ class FishSpeechClient(TTSClient):
             )
         ):  
             file_path = Path(temp_folder) / f"{segment.start}_{segment.end}.wav"
+            segment.speaker #
             
             if not file_path.exists():
                 if not segment.source_file:

@@ -35,7 +35,6 @@ class TranslatedTextedSegment:
 @attr.s(auto_attribs=True)
 class VideoTranslation:
     public_id: str
-
     source_lang_code: str | None = attr.ib(default=None)
     source_file: RemoteFile | None = attr.ib(default=None)
     extracted_audio: RemoteFile | None = attr.ib(default=None)
@@ -58,7 +57,7 @@ class TranslationPipelineConfig:
     device: str = field(default="cuda")
     name: str = field(default="example")
     dubbing_algo: Literal["speedup", "pause_based", "stretch_whole"] = field(default="speedup")
-    tts_model: Literal["xtts", "f5tts", "elevenlabs"] = field(default=None)
+    tts_model: Literal["fish", "xtts", "f5tts", "elevenlabs"] = field(default=None)
     eleven_api_token: str = field(default=None)
     watermark: bool = field(default=False)
 
