@@ -89,7 +89,7 @@ def get_target_language_for_video(video_key):
     # If source language is in our map, return its target, otherwise default to English
     return language_map.get(source_language, 'english')
 
-def submit_translation_job(video_url, runpod_api_key, video_key, endpoint_id='imukd6fpsg4hk4'):
+def submit_translation_job(video_url, runpod_api_key, video_key, endpoint_id='n18l9yzz7ajaea'):
     """Submit a translation job to RunPod API"""
     headers = {
         'Content-Type': 'application/json',
@@ -123,7 +123,7 @@ def submit_translation_job(video_url, runpod_api_key, video_key, endpoint_id='im
         print(f"Error submitting job: {response.status_code} - {response.text}")
         return None
 
-def check_job_status(job_id, runpod_api_key, endpoint_id='imukd6fpsg4hk4'):
+def check_job_status(job_id, runpod_api_key, endpoint_id='n18l9yzz7ajaea'):
     """Check the status of a RunPod job"""
     headers = {
         'Authorization': f'Bearer {runpod_api_key}'

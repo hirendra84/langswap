@@ -8,8 +8,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
 from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 from typing import Tuple, List
-from src.model_config import MODEL_WEIGHTS_DIR
 from llama_cpp import Llama
+
+MODEL_WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "../../../models_weights")
 
 class TranslatorClient(ABC):
 
@@ -21,7 +22,7 @@ class TranslatorClient(ABC):
 
 
 class QuantizedGemmaTranslationClient(TranslatorClient):
-    def __init__(self, device="cuda", model_path="./models_weights/gemma-3-27b-it-q4_0.gguf", n_gpu_layers=-1):
+    def __init__(self, device="cuda", model_path=f"{MODEL_WEIGHTS_DIR}/gemma-3-27b-it-q4_0.gguf", n_gpu_layers=-1):
         super().__init__(device)
         self.model_path = model_path
         self.n_gpu_layers = n_gpu_layers  # -1 means use all available GPU layers

@@ -79,7 +79,11 @@ class XTTSClient:
                     add_pauses(segment.source_file)
             
                 self.generate_audio(
-                    segment.translation, source_file, file_path, language
+                    text = segment.translation,
+                    source_audio_file = source_file,
+                    source_text = "", # XTTS doesn't use source text
+                    save_path = file_path,
+                    language = language
                 )
                 
             video_translation.translated_texts[idx].generated_file = file_path

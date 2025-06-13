@@ -58,11 +58,13 @@ class FishSpeechClient(TTSClient):
         decoder_checkpoint_path: str | Path = "./models_weights/fish-speech-1.5/firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
         device: str = "cuda",
         compile_models: bool = True,
+        remove_accent: bool = False,  # Add accent removal toggle
     ):
         super().__init__()
         self._file_repository = file_repository
         self.device = device
         self.sample_rate = 44100
+        self.remove_accent = remove_accent  # Store the accent removal preference
         
         self.llama_checkpoint_path = Path(os.path.abspath(llama_checkpoint_path))
         self.decoder_checkpoint_path = Path(os.path.abspath(decoder_checkpoint_path))
@@ -84,79 +86,200 @@ class FishSpeechClient(TTSClient):
         logger.info("Fish Speech Pipeline loaded.")
 
     def generate_and_trim_audio(
-        self, text: str, source_audio_file: str, source_text: str, 
-        save_path: str, language: Optional[str] = "en",
-        chunk_length: int = 200, top_p: float = 0.7,
-        repetition_penalty: float = 1.2, temperature: float = 0.5,
-        seed: Optional[int] = None, max_new_tokens: int = 1024,
+        self, 
+        text: str, 
+        references,  # Changed from source_audio_file/source_text to references
+        save_path: str, 
+        language: Optional[str] = "en",
+        chunk_length: int = 200, 
+        top_p: float = 0.7,
+        repetition_penalty: float = 1.2, 
+        temperature: float = 0.5,
+        seed: Optional[int] = None, 
+        max_new_tokens: int = 1024,
     ) -> bool:
-        if not self.model: return False
-        source_audio_p = Path(source_audio_file).resolve()
-        if not source_text or not source_audio_p.exists(): return False
-        
+        if not self.model:
+            return False
+
+        # Generate audio using the provided reference
+        audio = self.model.generate(
+            text=text,
+            references=references,
+            chunk_length=chunk_length,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            temperature=temperature,
+            seed=seed,
+            max_new_tokens=max_new_tokens,
+        )
+        if audio is None:
+            return False
+
+        # Save the generated audio to the specified path
         save_path_p = Path(save_path).resolve()
         save_path_p.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(save_path_p), audio, self.sample_rate)
+        return True
 
-        current_lang_key = language.lower()
-        # Get the whisper-specific language code
-        whisper_lang_code = map_language_to_code(current_lang_key, system="whisper")
-
-        prefix = self.ACCENT_REMOVAL_PREFIXES.get(whisper_lang_code, self.DEFAULT_ACCENT_REMOVAL_PREFIX)
-        text_with_prefix = prefix + text
-
-        ref = self.model.make_reference(str(source_audio_p), source_text)
-        audio_with_prefix = self.model.generate(
-            text=text_with_prefix, references=ref, chunk_length=chunk_length,
-            top_p=top_p, repetition_penalty=repetition_penalty,
-            temperature=temperature, seed=seed, max_new_tokens=max_new_tokens,
-        )
-        if audio_with_prefix is None: return False
-
-        # Attempt to trim prefix using WhisperX
-        trimmed_audio = audio_with_prefix # Default to untrimmed
-        if whisper_lang_code not in self._whisperx_align_models:
-            align_model, meta = whisperx.load_align_model(whisper_lang_code, self.device)
-            self._whisperx_align_models[whisper_lang_code] = (align_model, meta)
+    def trim_prefix_from_audio(self, audio, full_text, prefix, language_code):
+        if language_code not in self._whisperx_align_models:
+            align_model, meta = whisperx.load_align_model(language_code, self.device)
+            self._whisperx_align_models[language_code] = (align_model, meta)
         else:
-            align_model, meta = self._whisperx_align_models[whisper_lang_code]
+            align_model, meta = self._whisperx_align_models[language_code]
 
-        segments_for_align = [{"text": text_with_prefix, "start": 0.0, "end": audio_with_prefix.shape[0] / self.sample_rate}]
-        align_result = whisperx.align(segments_for_align, align_model, meta, audio_with_prefix, self.device, return_char_alignments=False)
+        segments_for_align = [{
+            "text": full_text,
+            "start": 0.0,
+            "end": audio.shape[0] / self.sample_rate
+        }]
+        align_result = whisperx.align(segments_for_align, align_model, meta, audio, self.device, return_char_alignments=False)
 
         if align_result and align_result.get('segments'):
             words = align_result['segments'][0].get('words', [])
             prefix_word_count = len(prefix.strip().split())
-            if len(words) > prefix_word_count and 'start' in words[prefix_word_count] and prefix_word_count > 1:
-                start_frame = int(words[prefix_word_count-1]['end'] * self.sample_rate)
-                trimmed_audio = audio_with_prefix[start_frame:]
+            if len(words) > prefix_word_count and 'start' in words[prefix_word_count]:
+                start_frame = int(words[prefix_word_count]['start'] * self.sample_rate)
+                trimmed_audio = audio[start_frame:]
+                return trimmed_audio
             else:
-                logger.warning(f"WhisperX could not reliably find prefix end for '{prefix}'. Saving untrimmed audio.")
+                logger.warning(f"WhisperX could not reliably find prefix end for '{prefix}'.")
+                return None
         else:
-            logger.warning("WhisperX alignment failed. Saving untrimmed audio.")
-        
-        sf.write(str(save_path_p), trimmed_audio, self.sample_rate)
-        return True
+            logger.warning("WhisperX alignment failed.")
+            return None
+
+    def generate_reference_for_speaker(self, speaker, segments, language):
+        """
+        Generate up to 4 trimmed references for a speaker from their segments, preferring longer ones.
+        Returns a list of references.
+        """
+        # Sort segments by duration (prefer longer)
+        valid_segments = [
+            s for s in segments
+            if getattr(s, 'source_file', None) and (getattr(s, 'text', None) or getattr(s, 'source_text', None))
+        ]
+        # Remove duplicates by (source_file, text/source_text)
+        seen = set()
+        unique_segments = []
+        for s in sorted(valid_segments, key=lambda s: -(getattr(s, 'end', 0) - getattr(s, 'start', 0))):
+            key = (getattr(s, 'source_file', None), getattr(s, 'text', None) or getattr(s, 'source_text', None))
+            if key not in seen:
+                seen.add(key)
+                unique_segments.append(s)
+            if len(unique_segments) >= 4:
+                break
+
+        references = []
+        for s in unique_segments:
+            source_audio_file = getattr(s, 'source_file', None)
+            source_text = getattr(s, 'text', None) or getattr(s, 'source_text', None)
+            ref = self._generate_single_reference(speaker, source_audio_file, source_text, language)
+            if ref is not None:
+                references.append(ref)
+        return references
+
+    def _generate_single_reference(self, speaker, source_audio_file, source_text, language):
+        if self.remove_accent:
+            # Current behavior: generate with prefix and trim
+            current_lang_key = language.lower()
+            whisper_lang_code = map_language_to_code(current_lang_key, system="whisper")
+            prefix = self.ACCENT_REMOVAL_PREFIXES.get(whisper_lang_code, self.DEFAULT_ACCENT_REMOVAL_PREFIX)
+            text_with_prefix = prefix + source_text
+
+            # Generate audio with the accent removal prefix
+            audio_with_prefix = self.model.generate(
+                text=text_with_prefix,
+                references=self.model.make_reference(str(Path(source_audio_file).resolve()), source_text),
+                chunk_length=200,
+                top_p=0.7,
+                repetition_penalty=1.2,
+                temperature=0.5,
+                seed=None,
+                max_new_tokens=1024,
+            )
+            if audio_with_prefix is None:
+                return None
+
+            # Trim the prefix from the audio using WhisperX
+            trimmed_audio = self.trim_prefix_from_audio(audio_with_prefix, text_with_prefix, prefix, whisper_lang_code)
+            if trimmed_audio is None:
+                return None
+
+            # Save the trimmed audio as a temporary reference file
+            temp_ref_file = Path(f"/tmp/{speaker}_{uuid.uuid4().hex}_reference.wav")
+            sf.write(str(temp_ref_file), trimmed_audio, self.sample_rate)
+
+            # Create a reference from the trimmed audio
+            reference = self.model.make_reference(str(temp_ref_file), source_text)
+            return reference
+        else:
+            # One-pass generation without accent removal
+            # Generate audio directly from the source reference
+            audio = self.model.generate(
+                text=source_text,
+                references=self.model.make_reference(str(Path(source_audio_file).resolve()), source_text),
+                chunk_length=200,
+                top_p=0.7,
+                repetition_penalty=1.2,
+                temperature=0.5,
+                seed=None,
+                max_new_tokens=1024,
+            )
+            if audio is None:
+                return None
+
+            # Save the generated audio as a temporary reference file
+            temp_ref_file = Path(f"/tmp/{speaker}_{uuid.uuid4().hex}_reference.wav")
+            sf.write(str(temp_ref_file), audio, self.sample_rate)
+
+            # Create a reference from the generated audio
+            reference = self.model.make_reference(str(temp_ref_file), source_text)
+            return reference
 
     def tts_pipeline(self, video_translation, temp_folder: str, language: str = "en") -> List[TranslatedTextedSegment]:
         Path(temp_folder).mkdir(parents=True, exist_ok=True)
+        references_per_speaker = {}  # Store references for each speaker
+
+        # Group segments by speaker
+        from collections import defaultdict
+        speaker_segments = defaultdict(list)
+        for segment in video_translation.translated_texts:
+            speaker = getattr(segment, 'speaker', None)
+            if speaker:
+                speaker_segments[speaker].append(segment)
+
         for idx, segment in enumerate(tqdm(video_translation.translated_texts, desc="FishSpeech TTS")):
             file_path = (Path(temp_folder) / f"{segment.start}_{segment.end}.wav").resolve()
-            
+
             if file_path.exists():
                 video_translation.translated_texts[idx].generated_file = str(file_path)
                 continue
 
             source_audio = getattr(segment, 'source_file', None)
             source_txt_clone = getattr(segment, 'text', None) or getattr(segment, 'source_text', None)
+            speaker = getattr(segment, 'speaker', None)  # Access speaker information
 
-            if not source_audio or not source_txt_clone or not segment.translation:
+            if not source_audio or not source_txt_clone or not segment.translation or not speaker:
                 video_translation.translated_texts[idx].generated_file = None
                 continue
-            
+
+            # Create up to 4 references for each speaker
+            if speaker not in references_per_speaker:
+                references = self.generate_reference_for_speaker(
+                    speaker, speaker_segments[speaker], language
+                )
+                references_per_speaker[speaker] = references
+            else:
+                references = references_per_speaker[speaker]
+
+            if not references:
+                video_translation.translated_texts[idx].generated_file = None
+                continue
+
             success = self.generate_and_trim_audio(
                 text=segment.translation,
-                source_audio_file=str(Path(source_audio).resolve()),
-                source_text=source_txt_clone,
+                references=references,  # Use the list of references for this speaker
                 save_path=str(file_path),
                 language=language,
             )
