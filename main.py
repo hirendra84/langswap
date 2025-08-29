@@ -61,6 +61,10 @@ def process_translation(input, progress_callback=None):
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
     file_path = get_file(repo, input.get("s3_video_url"))
     
+    tts_engine = input.get("tts_engine", "xtts")
+    if input.get('source_language') == "english" and input.get("target_language") == "russian":
+        tts_engine = "f5tts"
+
     config = TranslationPipelineConfig(
         source_lang=input.get('source_language', None),
         target_lang=input.get('target_language'),
@@ -71,7 +75,7 @@ def process_translation(input, progress_callback=None):
         base_dir=BASE_DIR,
         device='cuda',
         voice_conv=False,
-        tts_model=input.get("tts_engine"),
+        tts_model=tts_engine,
         dubbing_algo="speedup",
         eleven_api_token=input.get("token", None),
         watermark=input.get("watermark", True)

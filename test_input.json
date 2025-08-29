@@ -1,9 +1,10 @@
 {
   "input": {
-    "target_language": "english",
-    "tts_engine": "xtts",
+    "source_language": "english",
+    "target_language": "russian",
+    "tts_engine": "f5tts",
     "watermark": true,
-    "token": "sk_c19c5b09b8ed344001533cd014757897876eb7da49d90523",
-    "s3_video_url": "https://storage.yandexcloud.net/langswap-videos-dev/tests/spanish.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=YCAJEHb66M9f2KjixgUYKyLja%2F20250322%2Fru-central1%2Fs3%2Faws4_request&X-Amz-Date=20250322T195808Z&X-Amz-Expires=2592000&X-Amz-Signature=6A898BDD526AB60A2F0FBC5D3316C72CBA73170D69EAF286BF37CA34FFD7BABE&X-Amz-SignedHeaders=host"
+    "num_speakers": 1,
+    "s3_video_url": "https://storage.yandexcloud.net/langswap-videos-dev/source_linked_lists.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=YCAJEHb66M9f2KjixgUYKyLja%2F20250819%2Fru-central1%2Fs3%2Faws4_request&X-Amz-Date=20250819T114844Z&X-Amz-Expires=2592000&X-Amz-Signature=aa3e96354445e5033d418fd226078424f1c4ea1de249b6e975dfcb721430a139&X-Amz-SignedHeaders=host"
   }
 }

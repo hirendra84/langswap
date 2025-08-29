@@ -2,15 +2,16 @@ import sys
 
 # TODO: change the paths
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../../F5-TTS"))
-from model.utils_infer import (
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../../F5-TTS/src"))
+from f5_tts.infer.utils_infer import (
     load_vocoder,
     load_model,
     infer_process,
+    preprocess_ref_audio_text,
     remove_silence_for_generated_wav,
 )
 
-from model import DiT
+from f5_tts.model import DiT
 from cached_path import cached_path
 import re
 import tomli
@@ -26,22 +27,19 @@ from ruaccent import RUAccent
 class FlowClient:
     def __init__(
         self,
-        config_path="/app/F5-TTS/inference-cli.toml",
-        vocab_file='./models_weights/f5_weight/vocab.txt',
+        vocab_file='./models_weights/ESpeech-TTS/vocab.txt',
         vocos_local_path: str = "./models_weights/vocos-mel-24khz",
+        model_path: str = "./models_weights/ESpeech-TTS/model_rlv2.pt",
     ):
-        # TODO: change all the paths to relative
-        #self.config = tomli.load(open(config_path, "rb"))
         self.vocab_file = vocab_file
         self.sample_rate = 24000
+        self.model_path = model_path
 
         # where do we use vocos?
         self.vocos = load_vocoder(is_local=True, local_path=vocos_local_path)
         
         self.accentizer = RUAccent()
         self.tts = self.load_tts_flow()
-        #self.ref_audio = "/app/F5-TTS/test_en_1_ref_short.wav"
-        #self.ref_text = self.config["ref_text"]
 
     def load_tts_flow(self):
         model_cls = DiT
@@ -49,8 +47,13 @@ class FlowClient:
             dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4
         )
         self.accentizer.load(omograph_model_size='turbo3.1', use_dictionary=True, tiny_mode=False, workdir="./models_weights/ruaccent")
-
-        model = load_model(model_cls, model_cfg, "./models_weights/f5_weight/model_last.pt", self.vocab_file)
+        model = load_model(
+            model_cls=model_cls,
+            model_cfg=model_cfg,
+            ckpt_path=self.model_path,
+            mel_spec_type="vocos",
+            vocab_file=self.vocab_file,
+            device="cuda")
         return model
 
     def generate_audio(
@@ -62,7 +65,6 @@ class FlowClient:
         language: str,
         duration=None
     ):
-        # ref_audio, ref_text = preprocess_ref_audio_text(ref_audio, ref_text) # TODO remove and use only the main voice
         generated_audio_segments = []
         reg1 = r"(?=\[\w+\])"
         chunks = re.split(reg1, text)
@@ -75,8 +77,21 @@ class FlowClient:
             if language == "russian":
                 gen_text = self.accentizer.process_all(gen_text)
             
+            print(f"Duration within generate_audio: {duration}")
+            source_audio_file, source_text = preprocess_ref_audio_text(
+                source_audio_file, 
+                source_text, 
+            )
+                    
             audio, final_sample_rate, _ = infer_process(
-                source_audio_file, source_text, gen_text, self.tts, fix_duration=None, vocos=self.vocos
+                ref_audio=source_audio_file,
+                ref_text=source_text,
+                gen_text=gen_text,
+                model_obj= self.tts,
+                vocoder=self.vocos,
+                mel_spec_type="vocos",
+                speed=1.5,
+                # fix_duration=duration+7 # 7 is a magic number 
             )
             generated_audio_segments.append(audio)
 
@@ -96,8 +111,10 @@ class FlowClient:
             file_path = os.path.join(temp_folder, f"{segment.start}_{segment.end}.wav")
 
             if not os.path.exists(file_path):
+                duration = (segment.end - segment.start)
+                print(f"Duration: {duration}")
                 self.generate_audio(
-                    segment.translation, segment.source_file, segment.text, file_path, language
+                    segment.translation, segment.source_file, segment.text, file_path, language, duration=duration
                 )
             video_translation.translated_texts[idx].generated_file = file_path
         return video_translation

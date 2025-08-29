@@ -11,7 +11,6 @@ from src.ml.text_to_speech_service.tts_client import TTSClient
 from src.ml.text_to_speech_service.tts_xtts_client import XTTSClient
 from src.ml.text_to_speech_service.tts_f5_client import FlowClient
 from src.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
-from src.ml.text_to_speech_service.tts_fish_speech_client import FishSpeechClient
 from src.ml.text_to_speech_service.voice_converter import VoiceToneConverter
 from src.utils.ml_processing.lang2code_mapper import map_language_to_code
 
@@ -69,7 +68,8 @@ class TextToSpeechManager:
             source_audio_file=segment.source_file,
             source_text=segment.text, 
             save_path=file_path,
-            language=language
+            language=language,
+            duration=segment.end - segment.start
         )
         segment.generated_file = file_path
         if voice_conv:
@@ -99,8 +99,6 @@ class TextToSpeechManager:
     def choose_tts_client(self, name: str, file_repository, device):
         if name == "xtts":
             self._tts_client = XTTSClient(file_repository=file_repository, device=device)
-        if name == "fish":
-            self._tts_client = FishSpeechClient(file_repository=file_repository, device=device)
         elif name == "elevenlabs":
             self._tts_client = ElevenTTSClient(self.eleven_api_token)
         elif name == "f5tts":
@@ -151,7 +149,7 @@ class TextToSpeechManager:
             self._file_repository.save_dir(self._file_repository.subdir('styled_audio'))
         
         new_video_translation = VideoTranslation(
-            public_id=self.public_id,
+            public_id=video_translation.public_id,
             source_file=video_translation.source_file,
             extracted_audio=video_translation.extracted_audio,
             background_audio=video_translation.background_audio,

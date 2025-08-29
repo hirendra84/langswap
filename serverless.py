@@ -1,6 +1,16 @@
 import sys
+import subprocess
 import runpod
 from main import process_translation, test_video_translation_local, process_update_translation
+
+# Set GPU compute mode at startup
+try:
+    subprocess.run(['nvidia-smi', '-c', '0'], check=True)
+    print("Successfully set GPU compute mode to DEFAULT")
+except subprocess.CalledProcessError as e:
+    print(f"Warning: Failed to set GPU compute mode: {e}")
+except FileNotFoundError:
+    print("Warning: nvidia-smi not found, skipping GPU compute mode configuration")
 
 def handler(job):
     """RunPod serverless handler that uses main.py functionality"""

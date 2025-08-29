@@ -1,14 +1,9 @@
 from abc import ABC
-import json
-import torch
 from tqdm import tqdm
 import os
-from src.utils.ml_processing.lang2code_mapper import map_language_to_code
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-import torch
-from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 from typing import Tuple, List
 from llama_cpp import Llama
+import re
 
 MODEL_WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "../../../models_weights")
 
@@ -20,9 +15,8 @@ class TranslatorClient(ABC):
     def translate(self, sentences: List[str], source_lang: str, target_lang: str, context: List[str]) -> list[str]:
         ...
 
-
-class QuantizedGemmaTranslationClient(TranslatorClient):
-    def __init__(self, device="cuda", model_path=f"{MODEL_WEIGHTS_DIR}/gemma-3-27b-it-q4_0.gguf", n_gpu_layers=-1):
+class LLMTranslationClient(TranslatorClient):
+    def __init__(self, device="cuda", model_path="/media/beijing/checkpoints/gpt-oss-20b-Q5_K_M.gguf", n_gpu_layers=-1):
         super().__init__(device)
         self.model_path = model_path
         self.n_gpu_layers = n_gpu_layers  # -1 means use all available GPU layers
@@ -32,10 +26,17 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
         self.model = Llama(
             model_path=self.model_path,
             n_gpu_layers=self.n_gpu_layers,
-            chat_format="gemma",
+            chat_format="chatml",
             n_ctx=8096,
             verbose=False
         )
+
+    def extract_final_output(self, text: str) -> str:
+        # Match content inside <|channel|>final ... <|end|>
+        match = re.search(r"<\|channel\|>final<\|message\|>(.*?)$", text, re.S)
+        if match:
+            return match.group(1).strip()
+        return ""  # or None if not found
 
     def translate(self, sentences: List[str], source_language: str, target_language: str, temperature=1.0, top_k=64, top_p=0.95, min_p=0.0, max_new_tokens=1024*8) -> list[str]:
         '''
@@ -73,10 +74,10 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
                 top_k=top_k,
                 top_p=top_p,
                 min_p=min_p,
-                stop=["<end_of_turn>", "<eos>"]
+                stop=["<|im_end|>", "<|endoftext|>"]  # Changed to ChatML stop tokens
             )
 
-            decoded = response["choices"][0]["message"]["content"].strip()
+            decoded = self.extract_final_output(response["choices"][0]["message"]["content"].strip())
             
             messages.append(response["choices"][0]['message'])
         
@@ -84,3 +85,8 @@ class QuantizedGemmaTranslationClient(TranslatorClient):
         
         return translations
     
+
+if __name__ == "__main__":
+    client = LLMTranslationClient()
+    client.load_models()
+    print(client.translate(["Hello, how are you?"], "en", "it", temperature=1.0))
