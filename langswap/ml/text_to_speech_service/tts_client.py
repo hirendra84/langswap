@@ -1,5 +1,5 @@
 from abc import ABC
-from src.pipeline_models.models import TranslatedTextedSegment
+from langswap.pipeline_models.models import TranslatedTextedSegment
 
 
 class TTSClient(ABC):

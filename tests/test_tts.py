@@ -8,7 +8,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from src.ml.text_to_speech_service.tts_xtts_client import XTTSClient
+from langswap.ml.text_to_speech_service.tts_xtts_client import XTTSClient
 
 
 @patch('src.ml.text_to_speech_service.tts_xtts_client.TTS')

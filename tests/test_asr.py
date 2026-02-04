@@ -13,7 +13,7 @@ import torch
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.ml.speech_to_text_service.asr_client import ASRX, Segment, Output, TranscriptionData
+from langswap.ml.speech_to_text_service.asr_client import ASRX, Segment, Output, TranscriptionData
 
 
 class TestSegment:

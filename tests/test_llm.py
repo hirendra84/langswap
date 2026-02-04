@@ -12,7 +12,7 @@ from typing import List
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.ml.translation_service.translator_client import (
+from langswap.ml.translation_service.translator_client_gemma import (
     TranslatorClient,
     QuantizedGemmaTranslationClient
 )

@@ -3,16 +3,16 @@ import os
 
 from logging import getLogger
 
-from src.file_repository import FileRepository
-from src.pipeline_models.models import VideoTranslation
-from src.pipeline_models.models import TranslatedTextedSegment
-from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
-from src.ml.text_to_speech_service.tts_client import TTSClient
-from src.ml.text_to_speech_service.tts_xtts_client import XTTSClient
-from src.ml.text_to_speech_service.tts_f5_client import FlowClient
-from src.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
-from src.ml.text_to_speech_service.voice_converter import VoiceToneConverter
-from src.utils.ml_processing.lang2code_mapper import map_language_to_code
+from langswap.file_repository import FileRepository
+from langswap.pipeline_models.models import VideoTranslation
+from langswap.pipeline_models.models import TranslatedTextedSegment
+from langswap.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
+from langswap.ml.text_to_speech_service.tts_client import TTSClient
+# from langswap.ml.text_to_speech_service.tts_xtts_client import XTTSClient
+from langswap.ml.text_to_speech_service.tts_f5_client import FlowClient
+from langswap.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
+from langswap.ml.text_to_speech_service.tts_chatterbox_client import ChatterboxClient
+from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 
 logger = getLogger(__name__)
@@ -46,10 +46,6 @@ class TextToSpeechManager:
         
         self.tts_sample_rate = self._tts_client.sample_rate
 
-        model_path = os.path.abspath("./voice_conv/OpenVoiceV2")
-        self._speaker_conv_client = VoiceToneConverter(ckpt_converter_folder=model_path,
-                                                    device=device)
-
         self.logger = logger
         
               
@@ -72,28 +68,6 @@ class TextToSpeechManager:
             duration=segment.end - segment.start
         )
         segment.generated_file = file_path
-        if voice_conv:
-            self.logger.file_logger.info("Step: voice cloning pipeline")
-            
-            with self._speaker_conv_client as speaker_conv_client:
-                speaker = speaker_conv_client.generate_speaker_embedding(segment.generated_file)
-                
-                styled_audio_folder = self._file_repository.subdir("styled_audio")
-                _, audio_name = os.path.split(segment.source_file)
-                audio_save_path = os.path.join(styled_audio_folder, audio_name)
-                
-                cleaned_audio_path = vocals_path.replace(
-                    "vocals", "vocals_enhanced"
-                )
-                source_spekaer = speaker_conv_client.generate_speaker_embedding(cleaned_audio_path)
-                print(segment.generated_file)
-                speaker_conv_client.tone_color_converter.convert(
-                    audio_src_path=segment.generated_file,
-                    src_se=speaker,
-                    tgt_se=source_spekaer,
-                    output_path=audio_save_path,
-                )
-                segment.generated_file = audio_save_path
 
     
     def choose_tts_client(self, name: str, file_repository, device):
@@ -103,12 +77,13 @@ class TextToSpeechManager:
             self._tts_client = ElevenTTSClient(self.eleven_api_token)
         elif name == "f5tts":
             self._tts_client = FlowClient()
+        elif name == "chatterbox":
+            self._tts_client = ChatterboxClient(file_repository=file_repository, device=device)
 
 
     def synthesize(self, video_translation: VideoTranslation, source_lang: str, target_lang: str, voice_conv=False, enhance=False) -> VideoTranslation:
 
         vocals_audio = video_translation.background_audio["vocals.wav"]
-        # self._file_repository.materialize_file(vocals_audio)
 
         db_manager = AudioDubbingManager(file_repository=self._file_repository)
         AudioDubbingManager.resample_save(vocals_audio, self.tts_sample_rate)
@@ -136,17 +111,7 @@ class TextToSpeechManager:
                     generated_audio_folder,
                     language=target_lang)
         self._file_repository.save_dir(self._file_repository.subdir('generated_audio'))
-        
-        if voice_conv:
-            self.logger.file_logger.info("Step: voice cloning pipeline")
-            styled_audio_folder = self._file_repository.subdir("styled_audio")
-            with self._speaker_conv_client as speaker_conv_client:
-                video_translation = speaker_conv_client.voice_conversion_pipeline(
-                    video_translation,
-                    styled_audio_folder,
-                    source_lang=source_lang
-                )
-            self._file_repository.save_dir(self._file_repository.subdir('styled_audio'))
+       
         
         new_video_translation = VideoTranslation(
             public_id=video_translation.public_id,

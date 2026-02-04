@@ -2,7 +2,7 @@ import pandas as pd
 import torchaudio
 import torch
 import numpy as np
-from src.file_repository import FileRepository
+from langswap.file_repository import FileRepository
 from pyrubberband.pyrb import time_stretch
 import pandas as pd
 import numpy as np

@@ -5,7 +5,7 @@ from elevenlabs import save, Voice
 from elevenlabs.client import ElevenLabs
 from tqdm import tqdm
 
-from src.pipeline_models.models import TranslatedTextedSegment
+from langswap.pipeline_models.models import TranslatedTextedSegment
 
 
 class ElevenTTSClient:

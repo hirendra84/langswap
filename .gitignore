@@ -4,9 +4,20 @@
 *.pt
 *.bin
 *.onnx
+*.gguf
 data/
 app/
 model_weights/
+models_weights/
+
+# Local datasets / artifacts / vendor drops
+assets/
+notebooks/
+langswap-code.zip
+third_party/F5-TTS/
+
+# Local test inputs (keep tracked ones unaffected)
+test_input_*.json
 
 
 # Byte-compiled / optimized / DLL files

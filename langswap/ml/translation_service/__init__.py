@@ -1,11 +1,11 @@
 from logging import getLogger
 import os
 import json
-from src.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
-from src.file_repository import FileRepository
+from langswap.pipeline_models.models import TranslatedTextedSegment, VideoTranslation
+from langswap.file_repository import FileRepository
 
 
-from src.ml.translation_service.translator_client import TranslatorClient, LLMTranslationClient
+from langswap.ml.translation_service.translator_client import TranslatorClient, LLMTranslationClient
 
 
 logger = getLogger(__name__)
@@ -23,7 +23,8 @@ class TranslationManager:
 
         self.device = device
         self.logger = logger
-        self._translator_client = LLMTranslationClient(self.device)
+        model_path = os.getenv("LANGSWAP_TRANSLATEGEMMA_MODEL")
+        self._translator_client = LLMTranslationClient(self.device, model_path=model_path, local_files_only=True)
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts

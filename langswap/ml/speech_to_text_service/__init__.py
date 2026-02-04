@@ -3,14 +3,14 @@ import json
 from typing import List, Dict
 from logging import getLogger
 
-from src.ml.ffmpeg import FFmpegClient
-from src.file_repository import FileRepository
-from src.ml.speech_to_text_service import asr_client
-from src.pipeline_models.models import RemoteFile
-from src.pipeline_models.models import TextedSegment, VideoTranslation
-from src.ml.speech_to_text_service.asr_client import ASRX
-from src.ml.speech_to_text_service.vad_client import VadClient
-from src.ml.text_to_speech_service.demucs_client import DemucsClient
+from langswap.ml.ffmpeg import FFmpegClient
+from langswap.file_repository import FileRepository
+from langswap.ml.speech_to_text_service import asr_client
+from langswap.pipeline_models.models import RemoteFile
+from langswap.pipeline_models.models import TextedSegment, VideoTranslation
+from langswap.ml.speech_to_text_service.asr_client import ASRX
+from langswap.ml.speech_to_text_service.vad_client import VadClient
+from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
 
 logger = getLogger(__name__)
 

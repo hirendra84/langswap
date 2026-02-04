@@ -10,9 +10,7 @@ import sys
 import logging
 from datetime import datetime
 
-# Import the local testing function from main.py
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from main import test_video_translation_local
+from langswap.api import process_translation
 
 def load_environment():
     """Load environment variables from .env file"""

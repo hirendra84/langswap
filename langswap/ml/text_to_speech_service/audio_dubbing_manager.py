@@ -4,14 +4,18 @@ import torchaudio
 import torchaudio.transforms as transforms
 
 from pydub import AudioSegment
-from src.file_repository import FileRepository
+from langswap.file_repository import FileRepository
 from tqdm import tqdm
 import sys
 from typing import List
 
-sys.path.append(os.path.abspath("/app/resemble"))
+# sys.path.append(os.path.abspath("/app/resemble"))
 
-from resemble.resemble_enhance.enhancer.inference import denoise, enhance
+try:
+    from resemble_enhance.enhancer.inference import denoise, enhance
+except ModuleNotFoundError:  # optional dependency
+    denoise = None
+    enhance = None
 
 
 class AudioDubbingManager:
@@ -38,6 +42,11 @@ class AudioDubbingManager:
         return audio_path
 
     def enhance_audio(self, audio_path, save_path, solver="midpoint", nfe=64, tau=0.5):
+        if denoise is None or enhance is None:
+            raise ModuleNotFoundError(
+                "Optional dependency `resemble_enhance` is not installed. "
+                "Install it to use audio enhancement, or run with enhance=False."
+            )
         solver = solver.lower()
         nfe = int(nfe)
         lambd = 0.9

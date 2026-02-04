@@ -1,7 +1,7 @@
 import torchaudio
 import torch
 
-from src.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
+from langswap.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 
 
 def add_pauses(audio_path: str, num_sec=2):

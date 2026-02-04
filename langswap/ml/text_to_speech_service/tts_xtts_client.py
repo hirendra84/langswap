@@ -5,9 +5,9 @@ sys.path.append("/app/coqui")
 from tqdm.auto import tqdm
 
 from coqui.TTS.api import TTS
-from src.file_repository import FileRepository
+from langswap.file_repository import FileRepository
 import os
-from src.utils.ml_processing.lang2code_mapper import map_language_to_code
+from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 from .utils import add_pauses, merge_speaker_files
 
 

@@ -17,8 +17,16 @@ import attr
 import torch
 import requests
 from time import sleep
-from src.utils.ml_processing.lang2code_mapper import map_language_to_code
-from src.model_config import MODEL_WEIGHTS_DIR
+from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
+from langswap.model_config import MODEL_WEIGHTS_DIR
+
+# WhisperX API compatibility:
+# Some forks expose DiarizationPipeline at top-level (whisperx.DiarizationPipeline),
+# others expose it under whisperx.diarize.DiarizationPipeline.
+try:
+    DiarizationPipeline = whisperx.DiarizationPipeline  # type: ignore[attr-defined]
+except Exception:
+    from whisperx.diarize import DiarizationPipeline  # type: ignore
 
 # Load environment variables from .env file
 load_dotenv()
@@ -104,7 +112,7 @@ class ASRX:
         cwd = Path.cwd().resolve() 
         cd_to = Path(self.model_path_diarization).parent.parent.resolve()
         os.chdir(cd_to)
-        self.diarize_model = whisperx.DiarizationPipeline(
+        self.diarize_model = DiarizationPipeline(
             self.model_path_diarization, device=self.device
         )
         os.chdir(cwd)
