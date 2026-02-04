@@ -80,19 +80,12 @@ The project is intended for serverless deployment on Runpod. To deploy:
 
 - **serverless.py:** Main entry point implementing the Runpod handler.
 - **Dockerfile:** Defines the container environment with dependencies, CUDA support, and the execution command.
-- **src/translation_pipeline:** Contains the video translation logic.
-- **src/file_repository:** Manages remote and local file interactions.
-- **src/ml:** Contains the machine learning models and logic.
+- **langswap/translation_pipeline:** Contains the video translation logic.
+- **langswap/file_repository:** Manages remote and local file interactions.
+- **langswap/ml:** Contains the machine learning models and logic.
 - Other modules support speech-to-text, text-to-speech, and language translation.
 
-## P.S.
-
-If you want to install llama-cpp-python with CUDA support, you need to run the following command:
-
-```bash
-CMAKE_ARGS="-DGGML_CUDA=on -DGGML_CUDA_FORCE_CUBLAS=on -DLLAVA_BUILD=off -DCMAKE_CUDA_ARCHITECTURES=native" FORCE_CMAKE=1 pip install llama-cpp-python --no-cache-dir --force-reinstall --upgrade
-```
 
 ## License
 
-All rights reserved by Peace Data Inc, 2025.
+All rights reserved by Peace Data Inc, 2026.

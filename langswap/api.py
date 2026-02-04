@@ -1,3 +1,4 @@
+"""Public API for langswap package."""
 from importlib.util import source_hash
 import uuid
 from dotenv import load_dotenv
@@ -61,8 +62,8 @@ def process_translation(input, progress_callback=None):
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
     file_path = get_file(repo, input.get("s3_video_url"))
     
-    tts_engine = input.get("tts_engine", "chatterbox")
-    if input.get('source_language') == "english" and input.get("target_language") == "russian" and input.get("tts_engine") == "xtts":
+    tts_engine = input.get("tts_engine", "xtts")
+    if input.get('source_language') == "english" and input.get("target_language") == "russian":
         tts_engine = "f5tts"
 
     config = TranslationPipelineConfig(
