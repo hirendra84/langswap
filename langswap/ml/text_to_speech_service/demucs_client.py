@@ -3,6 +3,7 @@ import demucs.api
 import torch
 import torchaudio
 import os
+from typing import Optional
 from langswap.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 
 
@@ -33,7 +34,7 @@ class DemucsClient:
         return background_files
 
     def merge_background(self, generated_audio_path, audio_backgrounds: dict[str, str],
-                        modes: list | None = None) -> torch.Tensor:
+                        modes: Optional[list] = None) -> torch.Tensor:
         if modes is None:
             modes = ['drums.wav', 'bass.wav', 'other.wav']
             

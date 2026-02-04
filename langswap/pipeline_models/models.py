@@ -5,14 +5,14 @@ import json
 
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import List, Tuple, Union, Dict, Literal
+from typing import List, Tuple, Union, Dict, Literal, Optional
 
 
 @attr.s(auto_attribs=True)
 class RemoteFile:
-    name: str | None = attr.ib(default=None)
-    file_path: str | None = attr.ib(default=None)
-    s3_url: str | None = attr.ib(default=None)
+    name: Optional[str] = attr.ib(default=None)
+    file_path: Optional[str] = attr.ib(default=None)
+    s3_url: Optional[str] = attr.ib(default=None)
 
 
 @attr.s(auto_attribs=True)
@@ -37,14 +37,14 @@ class TranslatedTextedSegment:
 @attr.s(auto_attribs=True)
 class VideoTranslation:
     public_id: str
-    source_lang_code: str | None = attr.ib(default=None)
-    source_file: RemoteFile | None = attr.ib(default=None)
-    extracted_audio: RemoteFile | None = attr.ib(default=None)
-    vad_filtered_audio: RemoteFile | None = attr.ib(default=None)
+    source_lang_code: Optional[str] = attr.ib(default=None)
+    source_file: Optional[RemoteFile] = attr.ib(default=None)
+    extracted_audio: Optional[RemoteFile] = attr.ib(default=None)
+    vad_filtered_audio: Optional[RemoteFile] = attr.ib(default=None)
     background_audio: dict[str, RemoteFile] = attr.field(factory=dict)
     recognized_texts: list[TextedSegment] = attr.field(factory=list)
     translated_texts: list[TranslatedTextedSegment] = attr.field(factory=list)
-    processed_video: RemoteFile | None = attr.ib(default=None)
+    processed_video: Optional[RemoteFile] = attr.ib(default=None)
 
 
 @dataclass
@@ -59,7 +59,7 @@ class TranslationPipelineConfig:
     device: str = field(default="cuda")
     name: str = field(default="example")
     dubbing_algo: Literal["speedup", "pause_based", "stretch_whole"] = field(default="speedup")
-    tts_model: Literal["fish", "xtts", "f5tts", "elevenlabs"] = field(default=None)
+    tts_model: Literal["fish", "xtts", "f5tts", "elevenlabs", "qwen3"] = field(default=None)
     eleven_api_token: str = field(default=None)
     watermark: bool = field(default=False)
 
@@ -95,5 +95,5 @@ class TraslationUpdate:
     text: str
     
     @classmethod
-    def from_pairs(cls, pairs: List[Tuple[int, str]]) -> List['TranslationUpdate']:
+    def from_pairs(cls, pairs: List[Tuple[int, str]]) -> List["TraslationUpdate"]:
         return [cls(index=index, text=text) for index, text in pairs]

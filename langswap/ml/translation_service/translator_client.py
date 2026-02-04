@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC
-from typing import List
+from typing import List, Optional
 
 from tqdm import tqdm
 
@@ -28,7 +28,7 @@ class LLMTranslationClient(TranslatorClient):
     def __init__(
         self,
         device: str = "cuda",
-        model_path: str | None = None,
+        model_path: Optional[str] = None,
         local_files_only: bool = True,
     ):
         super().__init__(device)

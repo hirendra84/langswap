@@ -4,6 +4,7 @@ from enum import Enum, auto
 import os
 from tempfile import NamedTemporaryFile
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -34,7 +35,7 @@ class FFmpegClient:
         cmd = f"-y -i {input_path} -c:v libx264 -crf 23 -preset fast {output_path}.{output_format}"
         return self.run_command(cmd)
 
-    def extract_audio(self, input_path, output_path, time_limit: int | None = None, target_sr=24000):
+    def extract_audio(self, input_path, output_path, time_limit: Optional[int] = None, target_sr=24000):
         """Extract audio from video."""
         cmd = f"-y -i {input_path} -vn -acodec pcm_s16le -ar {target_sr} -ac 1 -f wav {output_path}"
         return self.run_command(cmd)
@@ -52,7 +53,7 @@ class FFmpegClient:
 
     def replace_audio(self, video_input_path: str, audio_input_path: str,
                       video_output_path: str,
-                      time_limit: int | None = None):
+                      time_limit: Optional[int] = None):
         limit_command = ''
         if time_limit:
             limit_command = f'-t {time_limit}'

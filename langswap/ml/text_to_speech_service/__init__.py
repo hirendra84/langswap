@@ -8,10 +8,6 @@ from langswap.pipeline_models.models import VideoTranslation
 from langswap.pipeline_models.models import TranslatedTextedSegment
 from langswap.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbingManager
 from langswap.ml.text_to_speech_service.tts_client import TTSClient
-# from langswap.ml.text_to_speech_service.tts_xtts_client import XTTSClient
-from langswap.ml.text_to_speech_service.tts_f5_client import FlowClient
-from langswap.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
-from langswap.ml.text_to_speech_service.tts_chatterbox_client import ChatterboxClient
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 
@@ -72,13 +68,29 @@ class TextToSpeechManager:
     
     def choose_tts_client(self, name: str, file_repository, device):
         if name == "xtts":
+            # Lazy import: XTTS has heavy/optional deps.
+            from langswap.ml.text_to_speech_service.tts_xtts_client import XTTSClient
+
             self._tts_client = XTTSClient(file_repository=file_repository, device=device)
         elif name == "elevenlabs":
+            from langswap.ml.text_to_speech_service.tts_eleven_client import ElevenTTSClient
+
             self._tts_client = ElevenTTSClient(self.eleven_api_token)
         elif name == "f5tts":
+            from langswap.ml.text_to_speech_service.tts_f5_client import FlowClient
+
             self._tts_client = FlowClient()
         elif name == "chatterbox":
+            from langswap.ml.text_to_speech_service.tts_chatterbox_client import ChatterboxClient
+
             self._tts_client = ChatterboxClient(file_repository=file_repository, device=device)
+        elif name == "qwen3":
+            # Lazy import: qwen-tts is optional.
+            from langswap.ml.text_to_speech_service.tts_qwen3_client import Qwen3TTSClient
+
+            self._tts_client = Qwen3TTSClient(device=device)
+        else:
+            raise ValueError(f"Unknown TTS engine: {name}")
 
 
     def synthesize(self, video_translation: VideoTranslation, source_lang: str, target_lang: str, voice_conv=False, enhance=False) -> VideoTranslation:

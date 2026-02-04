@@ -13,7 +13,7 @@ from typing import List
 
 try:
     from resemble_enhance.enhancer.inference import denoise, enhance
-except ModuleNotFoundError:  # optional dependency
+except (ModuleNotFoundError, TypeError):  # optional dependency (or incompatible Python)
     denoise = None
     enhance = None
 

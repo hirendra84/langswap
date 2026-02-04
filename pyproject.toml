@@ -24,6 +24,10 @@ dev = [
     "black",
     "flake8",
 ]
+qwen3 = [
+    "qwen-tts",
+    "soundfile",
+]
 
 [project.scripts]
 langswap = "langswap.cli:main"
