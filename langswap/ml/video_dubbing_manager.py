@@ -69,30 +69,67 @@ class VideoDubbingManager:
         return audio_final
     
     def change_pauses(self, wav_gen_path: str, wav_source_path: str,
-                    sr_gen: int, sr_source: int):
+                    sr_gen: int, sr_source: int,
+                    fallback_reduction: float = 0.8,
+                    max_expansion: float = 1.5):
         """
-        1. Calculates the pause duration of source and geneerated, 
-        2. Compares the pause of the two
-        3. Changes the duration of the pauses
-        4. Merges generated wav into a new wav
-        """
-        # SOURCE FILE HERE IS INCORRECT
-        pause_dur_source, timesteps_source = self.get_pause(wav_source_path, sr_source, seconds=True)
+        Adjusts intra-utterance pauses in generated audio to match source audio timing.
 
+        Algorithm:
+        1. Detect pauses in both source and generated audio using VAD
+        2. Compute pause adjustment ratio ρ = (τ_gen - τ_src) / τ_gen
+        3. If ρ > 0: compress pauses (generated has more pauses than source)
+           If ρ < 0: expand pauses (generated has fewer pauses than source)
+           If ρ = 1: use fallback (source has no pauses)
+        4. Apply adjustment to each detected pause
+
+        Args:
+            wav_gen_path: Path to generated audio file
+            wav_source_path: Path to source audio file
+            sr_gen: Sample rate of generated audio
+            sr_source: Sample rate of source audio
+            fallback_reduction: Reduction factor when source has no pauses (default 0.8)
+                               Empirically chosen to preserve some naturalness while reducing duration
+            max_expansion: Maximum pause expansion factor to prevent unnatural gaps (default 1.5)
+
+        Returns:
+            Adjusted audio tensor
+        """
+        pause_dur_source, timesteps_source = self.get_pause(wav_source_path, sr_source, seconds=True)
         pause_dur_gen, timesteps_gen = self.get_pause(wav_gen_path, sr_gen, seconds=True)
+
         if pause_dur_gen:
-            # TODO: the main trick is here to calculate the pause reduction and when to actually apply it
+            # Compute pause adjustment ratio
+            # ρ > 0: need to compress pauses (generated longer)
+            # ρ < 0: need to expand pauses (generated shorter)
+            # ρ = 1: source has no pauses, use fallback
             pause_reduction = (pause_dur_gen - pause_dur_source) / pause_dur_gen
+
             if pause_reduction == 1.0:
-                pause_reduction = 0.8
-            # _, timesteps_gen = self.get_pause(wav_gen_path, sr=sr_gen, seconds=False)
+                # Source has no pauses - use fallback to avoid removing all pauses
+                # 0.8 preserves 20% of original pauses for naturalness
+                pause_reduction = fallback_reduction
+                self.logger.file_logger.debug(f"Source has no pauses, using fallback reduction {fallback_reduction}")
+
+            # Apply adjustment to each pause
             for sp_idx, sp_data in enumerate(timesteps_gen):
-                # if pause_reduction < 1: # TODO: change not to make a pass
-                sp_data['pause'] = sp_data['pause']  - (pause_reduction * sp_data['pause'])
+                new_pause = sp_data['pause'] * (1 - pause_reduction)
+
+                # Limit expansion to prevent unnatural long gaps
+                if pause_reduction < 0:  # expansion case
+                    new_pause = min(new_pause, sp_data['pause'] * max_expansion)
+
+                sp_data['pause'] = max(new_pause, 0)  # ensure non-negative
 
             audio = self.merge_pauses(wav_gen_path, sr_gen, timesteps_gen)
+            self.logger.file_logger.debug(
+                f"Pause adjustment: src={pause_dur_source:.3f}s, gen={pause_dur_gen:.3f}s, "
+                f"ρ={pause_reduction:.3f}, action={'compress' if pause_reduction > 0 else 'expand'}"
+            )
         else:
             audio, sr_gen = torchaudio.load(wav_gen_path)
+            self.logger.file_logger.debug(f"No pauses detected in generated audio, skipping adjustment")
+
         return audio
     
     def merge_timestamps_speedup(self, video_translation, vocals_audio):
