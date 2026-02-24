@@ -7,8 +7,7 @@ from typing import List, Optional
 from tqdm import tqdm
 
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
-
-MODEL_WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "../../../models_weights")
+from langswap.model_downloader import ensure_translategemma_model
 
 class TranslatorClient(ABC):
 
@@ -23,17 +22,17 @@ class LLMTranslationClient(TranslatorClient):
     """
     TranslateGemma via Hugging Face Transformers.
     Uses the model's chat template (recommended by the model card).
+    Models are automatically downloaded on first use.
     """
 
     def __init__(
         self,
         device: str = "cuda",
         model_path: Optional[str] = None,
-        local_files_only: bool = True,
     ):
         super().__init__(device)
-        self.model_path = model_path or os.path.join(MODEL_WEIGHTS_DIR, "translategemma-4b-it")
-        self.local_files_only = local_files_only
+        # Auto-download model if not present
+        self.model_path = str(ensure_translategemma_model(model_path))
         self.model = None
         self.tokenizer = None
 
@@ -41,15 +40,9 @@ class LLMTranslationClient(TranslatorClient):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        if self.local_files_only and not os.path.isdir(self.model_path):
-            raise FileNotFoundError(
-                f"TranslateGemma model directory not found: {self.model_path}. "
-                "Put the model there or set LANGSWAP_TRANSLATEGEMMA_MODEL to the correct local path."
-            )
-
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_path,
-            local_files_only=self.local_files_only,
+            local_files_only=True,  # Model already downloaded by ensure_translategemma_model
         )
 
         torch_dtype = torch.bfloat16 if torch.cuda.is_available() else None
@@ -59,7 +52,7 @@ class LLMTranslationClient(TranslatorClient):
             self.model_path,
             torch_dtype=torch_dtype,
             device_map=device_map,
-            local_files_only=self.local_files_only,
+            local_files_only=True,  # Model already downloaded by ensure_translategemma_model
         )
 
         if getattr(self.tokenizer, "pad_token_id", None) is None and getattr(self.tokenizer, "eos_token_id", None) is not None:

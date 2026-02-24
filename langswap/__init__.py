@@ -7,6 +7,17 @@ __version__ = (Path(__file__).parent / '__VERSION__').read_text().strip()
 # Optional imports: keep package importable even when heavy ML deps aren't installed.
 __all__ = ["__version__"]
 
+# Model download utilities - always available
+try:
+    from langswap.model_downloader import (
+        download_all_models,
+        ensure_model,
+        list_available_models,
+    )
+    __all__ += ["download_all_models", "ensure_model", "list_available_models"]
+except Exception:
+    pass
+
 try:
     # Import main API functions
     from langswap.api import process_translation, init_s3_client, get_file

@@ -15,6 +15,7 @@ authors = [
 dependencies = [
     "boto3",
     "python-dotenv",
+    "huggingface_hub>=0.20.0",
     # Add other dependencies from requirements.txt
 ]
 
@@ -32,6 +33,7 @@ qwen3 = [
 [project.scripts]
 langswap = "langswap.cli:main"
 langswap-test = "langswap.cli:test_translation"
+langswap-download-models = "langswap.model_downloader:main"
 
 [tool.setuptools.dynamic]
 version = {file = "langswap/__VERSION__"}

@@ -6,11 +6,9 @@ import json
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Set HuggingFace cache directory to models_weights/
-current_file_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-project_root = current_file_dir.parents[2]
-os.environ["HF_HOME"] = str(project_root / "models_weights")
-os.environ["TRANSFORMERS_CACHE"] = str(project_root / "models_weights")
+# Import model config first to set up cache environment
+from langswap.model_config import MODEL_WEIGHTS_DIR
+from langswap.model_downloader import ensure_whisperx_model
 
 import whisperx
 import attr
@@ -18,7 +16,6 @@ import torch
 import requests
 from time import sleep
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
-from langswap.model_config import MODEL_WEIGHTS_DIR
 
 # WhisperX API compatibility:
 # Some forks expose DiarizationPipeline at top-level (whisperx.DiarizationPipeline),
@@ -66,12 +63,9 @@ class TranscriptionDataLocal:
 
 class ASRX:
 
-    def __init__(self, device, language) -> None:
-        current_file_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-        project_root = current_file_dir.parents[2]  # Go up 3 levels to reach project root
-
-        models_base_dir = project_root / "models_weights"
-        self.model_path_whisper = models_base_dir / "faster-whisper-large-v3"
+    def __init__(self, device, language, skip_diarization: bool = False) -> None:
+        # Auto-download whisper model if not present
+        self.model_path_whisper = ensure_whisperx_model()
 
         self.model = None
         if language is not None:
@@ -79,13 +73,19 @@ class ASRX:
         else:
             self.language = None
         self.diarize_model = None
+        self.skip_diarization = skip_diarization
 
-        # Diarization model path
-        diarize_model_dir = models_base_dir / "pyannote/pyannote_diarization_config.yaml"#models_base_dir / "pyannote" / "models--pyannote--speaker-diarization-3.1" / "snapshots" / "84fd25912480287da0247647c3d2b4853cb3ee5d" / "config.yaml"
+        # Diarization model path - uses pyannote config in cache directory
+        # Note: pyannote models require HF_TOKEN for gated model access
+        models_base_dir = Path(MODEL_WEIGHTS_DIR)
+        diarize_model_dir = models_base_dir / "pyannote/pyannote_diarization_config.yaml"
         self.model_path_diarization = str(diarize_model_dir.resolve())
-        
-        if not os.path.exists(self.model_path_diarization):
-            raise FileNotFoundError(f"Diarization model not found at: {self.model_path_diarization}")
+
+        if not skip_diarization and not os.path.exists(self.model_path_diarization):
+            raise FileNotFoundError(
+                f"Diarization model not found at: {self.model_path_diarization}\n"
+                "Please set HF_TOKEN environment variable and run: langswap-download-models --model pyannote-speaker-diarization"
+            )
 
         self.device = device
         self.load_models()
@@ -101,21 +101,23 @@ class ASRX:
 
     def load_models(self):
         compute_type = "int8" if self.device != "cpu" else "float32"
-        
+
         self.model = whisperx.load_model(
-            str(self.model_path_whisper), 
-            device=self.device, 
-            compute_type=compute_type, 
+            str(self.model_path_whisper),
+            device=self.device,
+            compute_type=compute_type,
             local_files_only=True,
             language=self.language
         )
-        cwd = Path.cwd().resolve() 
-        cd_to = Path(self.model_path_diarization).parent.parent.resolve()
-        os.chdir(cd_to)
-        self.diarize_model = DiarizationPipeline(
-            self.model_path_diarization, device=self.device
-        )
-        os.chdir(cwd)
+
+        if not self.skip_diarization:
+            cwd = Path.cwd().resolve()
+            cd_to = Path(self.model_path_diarization).parent.parent.resolve()
+            os.chdir(cd_to)
+            self.diarize_model = DiarizationPipeline(
+                self.model_path_diarization, device=self.device
+            )
+            os.chdir(cwd)
 
 
     def get_cache_dir(self):
@@ -148,8 +150,15 @@ class ASRX:
             return_char_alignments=False,
         )
 
-        diarize_segments = self.diarize_model(audio, num_speakers=num_speakers)
-        response = whisperx.assign_word_speakers(diarize_segments, response)
+        if not self.skip_diarization and self.diarize_model is not None:
+            diarize_segments = self.diarize_model(audio, num_speakers=num_speakers)
+            response = whisperx.assign_word_speakers(diarize_segments, response)
+        else:
+            # Assign default speaker when diarization is skipped
+            for segment in response["segments"]:
+                segment["speaker"] = "SPEAKER_00"
+                for word in segment.get("words", []):
+                    word["speaker"] = "SPEAKER_00"
 
         all_words = []
         result = {}

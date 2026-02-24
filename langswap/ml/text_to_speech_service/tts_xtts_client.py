@@ -1,4 +1,5 @@
 import sys
+import os
 
 sys.path.append("/app/coqui")
 
@@ -6,8 +7,8 @@ from tqdm.auto import tqdm
 
 from coqui.TTS.api import TTS
 from langswap.file_repository import FileRepository
-import os
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
+from langswap.model_downloader import ensure_coqui_model
 from .utils import add_pauses, merge_speaker_files
 
 
@@ -15,14 +16,20 @@ class XTTSClient:
     def __init__(
         self,
         file_repository: FileRepository,
-        tts_model_path="./models_weights/xtts_model/tts_models/multilingual/multi-dataset/xtts_v2",
+        tts_model_path: str = None,
         device="cuda",
     ):
         self.device = device
         self.sample_rate = 24000
 
-        self.tts_model_path = os.path.abspath(tts_model_path)
-        self.config_path = os.path.join(tts_model_path, "config.json")
+        # Auto-download XTTS model if not present
+        if tts_model_path:
+            self.tts_model_path = os.path.abspath(tts_model_path)
+        else:
+            model_dir = ensure_coqui_model("coqui/XTTS-v2")
+            self.tts_model_path = str(model_dir / "multilingual" / "multi-dataset" / "xtts_v2")
+
+        self.config_path = os.path.join(self.tts_model_path, "config.json")
 
         self._file_repository = file_repository
 

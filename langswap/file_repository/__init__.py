@@ -182,6 +182,95 @@ class RemoteFileRepository(FileRepository):
             remove_file_collection.append(remote_file)
         return list_files
 
+class LocalOnlyFileRepository(FileRepository):
+    """File repository that works entirely locally without S3."""
+    _directory: str
+    _cached_files: dict[str, RemoteFile]
+
+    def __init__(self, public_id: str, base_directory: str):
+        self._directory = os.path.join(base_directory, public_id)
+        self._cached_files = {}
+        os.makedirs(self._directory, exist_ok=True)
+
+    def materialize_file(self, file: RemoteFile) -> RemoteFile:
+        if file.name in self._cached_files:
+            return self._cached_files[file.name]
+
+        file_path = os.path.join(self._directory, file.name)
+        # If file_path is already set and exists, use it
+        if file.file_path and os.path.exists(file.file_path):
+            import shutil
+            if file.file_path != file_path:
+                shutil.copy2(file.file_path, file_path)
+        elif file.s3_url:
+            # Download from URL
+            with requests.get(file.s3_url, stream=True) as response:
+                response.raise_for_status()
+                with open(file_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+
+        remote_file = RemoteFile(
+            name=file.name,
+            file_path=file_path,
+            s3_url=file.s3_url or f"file://{file_path}",
+        )
+        self._cached_files[file.name] = remote_file
+        return remote_file
+
+    def get_file(self, file_name: str):
+        cached = self._cached_files.get(file_name)
+        if cached is not None:
+            return cached
+        remote_file = RemoteFile(
+            name=file_name,
+            file_path=os.path.join(self._directory, file_name)
+        )
+        self._cached_files[file_name] = remote_file
+        return remote_file
+
+    def save_file(self, file: RemoteFile, force: bool = False):
+        # Local-only: just return the file as-is
+        if not file.s3_url:
+            file.s3_url = f"file://{file.file_path}"
+        return file
+
+    def save_file_from_stream(self, file: RemoteFile, stream: io.BytesIO):
+        file_path = os.path.join(self._directory, file.name)
+        with open(file_path, 'wb') as f:
+            while True:
+                chunk = stream.read(8192)
+                if not chunk:
+                    break
+                f.write(chunk)
+        return RemoteFile(
+            name=file.name,
+            file_path=file_path,
+            s3_url=f"file://{file_path}",
+        )
+
+    @property
+    def directory(self) -> str:
+        return self._directory
+
+    def subdir(self, dir_name: str) -> str:
+        new_dir = os.path.join(self._directory, dir_name)
+        os.makedirs(new_dir, exist_ok=True)
+        return new_dir
+
+    def save_dir(self, dir_name):
+        list_files = list(map(str, Path(dir_name).rglob("*.*")))
+        result = []
+        for file_name in list_files:
+            local_file = RemoteFile(
+                name=file_name,
+                file_path=file_name,
+                s3_url=f"file://{file_name}",
+            )
+            result.append(local_file)
+        return list_files
+
+
 class LocalFileRepository(FileRepository):
     _directory: str
     _download_chunk_size = 8192

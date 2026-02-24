@@ -8,14 +8,68 @@ This project implements a serverless video translation pipeline designed for dep
 - **Remote File Management:** Supports S3-compatible storage (e.g., Yandex Cloud) to download the source video and upload the translated output.
 - **Dockerized Deployment:** The provided `Dockerfile` builds a container image with all necessary dependencies and GPU support.
   
+## Installation
+
+### Quick Start (pip install)
+
+```bash
+# Install the package
+pip install -e .
+
+# Models are downloaded automatically on first use
+# Or pre-download all models:
+langswap-download-models --all
+
+# For gated models (pyannote), set your HuggingFace token first:
+export HF_TOKEN=your_huggingface_token
+langswap-download-models --all
+```
+
+### Model Management
+
+Models are cached in platform-appropriate directories:
+- **Linux:** `~/.cache/langswap/models`
+- **macOS:** `~/Library/Caches/langswap/models`
+- **Windows:** `%LOCALAPPDATA%\langswap\models`
+
+You can override this with the `MODEL_WEIGHTS_DIR` environment variable.
+
+```bash
+# List available models
+langswap-download-models --list
+
+# Download specific models
+langswap-download-models --model qwen3-tts
+langswap-download-models --model faster-whisper-large-v3
+langswap-download-models --model translategemma
+
+# Download to custom directory
+langswap-download-models --all --cache-dir /path/to/models
+```
+
+### Available Models
+
+| Model | Description | Requires Token |
+|-------|-------------|----------------|
+| `faster-whisper-large-v3` | WhisperX ASR model | No |
+| `qwen3-tts` | Qwen3 TTS with voice cloning | No |
+| `xtts-v2` | Coqui XTTS v2 TTS | No |
+| `translategemma` | TranslateGemma translation | No |
+| `pyannote-speaker-diarization` | Speaker diarization | Yes (HF_TOKEN) |
+| `pyannote-segmentation` | Speaker segmentation | Yes (HF_TOKEN) |
+| `vocos-mel-24khz` | Vocos vocoder | No |
+| `silero-vad` | Voice activity detection | No |
+
 ## Getting Started
 
 ### Prerequisites
 
-- Docker  
+- Python 3.8+
+- Docker (for serverless deployment)
 - A Runpod account (for serverless deployment)
 - Environment variables for AWS credentials (or compatible storage) set via a `.env` file
 - A S3-compatible storage bucket (e.g., Yandex Cloud)
+- (Optional) HuggingFace token for gated models
 
 ### Environment Setup
 
@@ -49,10 +103,17 @@ The project is intended for serverless deployment on Runpod. To deploy:
 
 1. **Build the Docker Image**
 
-   Before building the image, you need to download all model weights and put them in the `model_weights` folder. Otherwise, they would be downloaded during the first run of the service which isn't acceptable for the serverless deployment.
+   Before building the image, download all model weights to include them in the container:
 
+   ```bash
+   # Set HF token for gated models
+   export HF_TOKEN=your_huggingface_token
 
-   Build the Docker container using the provided Dockerfile:
+   # Download all models
+   langswap-download-models --all --cache-dir ./models_weights
+   ```
+
+   Then build the Docker container using the provided Dockerfile:
 
    ```bash
    docker build -t your_dockerhub_username/video-translation-pipeline:latest .

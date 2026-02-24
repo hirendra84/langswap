@@ -24,7 +24,7 @@ class TranslationManager:
         self.device = device
         self.logger = logger
         model_path = os.getenv("LANGSWAP_TRANSLATEGEMMA_MODEL")
-        self._translator_client = LLMTranslationClient(self.device, model_path=model_path, local_files_only=True)
+        self._translator_client = LLMTranslationClient(self.device, model_path=model_path)
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts

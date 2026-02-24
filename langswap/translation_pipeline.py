@@ -43,7 +43,14 @@ class VideoTranslationPipeline:
    
     def _generate_asr(self):
         print("initializing ASR manager")
-        stt_manager = SpeechToTextManager(language=self.config.source_lang, public_id=self.config.public_id, file_repository=self._file_repository, device=self.config.device, logger=self.logger)
+        stt_manager = SpeechToTextManager(
+            language=self.config.source_lang,
+            public_id=self.config.public_id,
+            file_repository=self._file_repository,
+            device=self.config.device,
+            logger=self.logger,
+            skip_diarization=getattr(self.config, 'skip_diarization', False)
+        )
         print(f"Transcribing audio file: {self.video_translation.source_file.file_path} with language: {self.config.source_lang}")
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers)
         if self.config.source_lang != None:

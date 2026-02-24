@@ -6,6 +6,7 @@ import soundfile as sf
 from tqdm.auto import tqdm
 
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
+from langswap.model_downloader import ensure_qwen3_tts_model
 
 
 class Qwen3TTSClient:
@@ -23,14 +24,8 @@ class Qwen3TTSClient:
         dtype: str = "auto",
         attn_implementation: Optional[str] = "flash_attention_2",
     ):
-        # Prefer local weights when available.
-        models_weights_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../models_weights"))
-        default_local_dir = os.path.join(models_weights_dir, "Qwen3-TTS-12Hz-0.6B-Base")
-
-        self.model_id = os.path.abspath(model_path) if model_path else (
-            os.getenv("LANGSWAP_QWEN3_TTS_MODEL")
-            or (default_local_dir if os.path.isdir(default_local_dir) else model_id)
-        )
+        # Auto-download model if not present
+        self.model_id = str(ensure_qwen3_tts_model(model_path))
         self.device = device
         self.dtype = dtype
         self.attn_implementation = attn_implementation

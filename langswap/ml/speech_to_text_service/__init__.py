@@ -17,14 +17,17 @@ logger = getLogger(__name__)
 
 class SpeechToTextManager:
 
-    def __init__(self, language, public_id: str, file_repository: FileRepository, device, logger):
+    def __init__(self, language, public_id: str, file_repository: FileRepository, device, logger, skip_diarization: bool = False):
         """
         Initializes the SpeechToTextManager.
 
         Sets up the ASR client, file repository, logger, and other configurations.
+
+        Args:
+            skip_diarization: If True, skips speaker diarization (useful when pyannote models are not available)
         """
         self.public_id = public_id
-        self._asr_client = ASRX(device=device, language=language)
+        self._asr_client = ASRX(device=device, language=language, skip_diarization=skip_diarization)
         self._file_repository = file_repository
         self.logger = logger
 

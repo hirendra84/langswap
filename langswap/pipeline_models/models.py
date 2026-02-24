@@ -62,6 +62,7 @@ class TranslationPipelineConfig:
     tts_model: Literal["fish", "xtts", "f5tts", "elevenlabs", "qwen3"] = field(default=None)
     eleven_api_token: str = field(default=None)
     watermark: bool = field(default=False)
+    skip_diarization: bool = field(default=False)  # Skip speaker diarization (useful when pyannote models unavailable)
 
 
 
