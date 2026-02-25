@@ -10,20 +10,21 @@ from pathlib import Path
 from langswap.model_config import MODEL_WEIGHTS_DIR
 from langswap.model_downloader import ensure_whisperx_model
 
-import whisperx
 import attr
 import torch
 import requests
 from time import sleep
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
-# WhisperX API compatibility:
-# Some forks expose DiarizationPipeline at top-level (whisperx.DiarizationPipeline),
-# others expose it under whisperx.diarize.DiarizationPipeline.
-try:
-    DiarizationPipeline = whisperx.DiarizationPipeline  # type: ignore[attr-defined]
-except Exception:
-    from whisperx.diarize import DiarizationPipeline  # type: ignore
+
+def _get_diarization_pipeline():
+    """Lazily import DiarizationPipeline to avoid loading pyannote/torchaudio at module level."""
+    try:
+        import whisperx
+        return whisperx.DiarizationPipeline  # type: ignore[attr-defined]
+    except (AttributeError, ImportError):
+        from whisperx.diarize import DiarizationPipeline  # type: ignore
+        return DiarizationPipeline
 
 # Load environment variables from .env file
 load_dotenv()
@@ -100,6 +101,7 @@ class ASRX:
         self.diarize_model = None
 
     def load_models(self):
+        import whisperx
         compute_type = "int8" if self.device != "cpu" else "float32"
 
         self.model = whisperx.load_model(
@@ -114,7 +116,7 @@ class ASRX:
             cwd = Path.cwd().resolve()
             cd_to = Path(self.model_path_diarization).parent.parent.resolve()
             os.chdir(cd_to)
-            self.diarize_model = DiarizationPipeline(
+            self.diarize_model = _get_diarization_pipeline()(
                 self.model_path_diarization, device=self.device
             )
             os.chdir(cwd)
@@ -125,6 +127,7 @@ class ASRX:
         return MODEL_WEIGHTS_DIR  # Go up to models_weights
 
     def transcribe(self, source_file: str, num_speakers=None) -> Output:
+        import whisperx
         audio = whisperx.load_audio(source_file)
         
         response = self.model.transcribe(

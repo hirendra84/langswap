@@ -49,7 +49,8 @@ class VideoTranslationPipeline:
             file_repository=self._file_repository,
             device=self.config.device,
             logger=self.logger,
-            skip_diarization=getattr(self.config, 'skip_diarization', False)
+            skip_diarization=getattr(self.config, 'skip_diarization', False),
+            backend=getattr(self.config, 'asr_backend', 'qwen'),
         )
         print(f"Transcribing audio file: {self.video_translation.source_file.file_path} with language: {self.config.source_lang}")
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers)
@@ -59,10 +60,11 @@ class VideoTranslationPipeline:
 
     def _generate_translation(self):
         torch.cuda.empty_cache()
-        translate_manager = TranslationManager(self.config.public_id, 
-                                               self._file_repository, 
-                                               device=self.config.device, 
-                                               logger=self.logger)
+        translate_manager = TranslationManager(self.config.public_id,
+                                               self._file_repository,
+                                               device=self.config.device,
+                                               logger=self.logger,
+                                               backend=getattr(self.config, 'translation_backend', 'local'))
         self.video_translation = translate_manager.translate(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang)
 
     def _generate_speech(self):

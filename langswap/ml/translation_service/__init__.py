@@ -17,14 +17,18 @@ class TranslationManager:
     _translator_client: TranslatorClient
     _file_repository: FileRepository
 
-    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger):
+    def __init__(self, public_id: str, file_repository: FileRepository, device: str, logger, backend: str = "local"):
         self.public_id = public_id
         self._file_repository = file_repository
 
         self.device = device
         self.logger = logger
-        model_path = os.getenv("LANGSWAP_TRANSLATEGEMMA_MODEL")
-        self._translator_client = LLMTranslationClient(self.device, model_path=model_path)
+        if backend == "openai":
+            from langswap.ml.translation_service.translator_openai_client import OpenAITranslationClient
+            self._translator_client = OpenAITranslationClient(device=self.device)
+        else:
+            model_path = os.getenv("LANGSWAP_TRANSLATEGEMMA_MODEL")
+            self._translator_client = LLMTranslationClient(self.device, model_path=model_path)
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts

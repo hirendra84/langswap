@@ -76,10 +76,12 @@ def process_translation(input, progress_callback=None):
         device='cuda',
         voice_conv=False,
         tts_model=tts_engine,
-        dubbing_algo="speedup",
+        dubbing_algo=input.get("dubbing_algo", "speedup"),
         eleven_api_token=input.get("token", None),
-        watermark=input.get("watermark", True)
-    ) 
+        watermark=input.get("watermark", True),
+        asr_backend=input.get("asr_backend", "qwen"),
+        translation_backend=input.get("translation_backend", "local"),
+    )
     
     pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
     
@@ -190,5 +192,77 @@ def test_video_translation_local(input_file="test_input.json"):
         print(e)
         raise
 
+def test_local_file(
+    local_video_path: str,
+    source_language: str = "russian",
+    target_language: str = "english",
+    tts_engine: str = "qwen3",
+    device: str = "mps",
+    skip_diarization: bool = True,
+    asr_backend: str = "qwen",
+    translation_backend: str = "local",
+):
+    """
+    Run the full pipeline on a local video file without S3.
+    Useful for local dev/testing on Mac.
+    """
+    from langswap.file_repository import LocalOnlyFileRepository
+    from langswap.translation_pipeline import VideoTranslationPipeline
+    from langswap.pipeline_models.models import TranslationPipelineConfig
+
+    # Derive a stable ID from the input file so intermediate results are cached
+    # across re-runs (avoids re-running ASR/translation on every retry).
+    import hashlib
+    public_id = hashlib.md5(str(local_video_path).encode()).hexdigest()[:12]
+    repo = LocalOnlyFileRepository(public_id, BASE_DIR)
+
+    config = TranslationPipelineConfig(
+        source_lang=source_language,
+        target_lang=target_language,
+        name=public_id,
+        public_id=public_id,
+        num_speakers=None,
+        source_video_path=local_video_path,
+        base_dir=BASE_DIR,
+        device=device,
+        voice_conv=False,
+        tts_model=tts_engine,
+        dubbing_algo="speedup",
+        eleven_api_token=os.environ.get("ELEVEN_API_KEY"),
+        watermark=False,
+        skip_diarization=skip_diarization,
+        asr_backend=asr_backend,
+        translation_backend=translation_backend,
+    )
+
+    pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
+
+    print("20% Starting transcription (Speech-to-Text)")
+    pipeline._generate_asr()
+    print("40% Starting translation")
+    pipeline._generate_translation()
+    print("60% Starting Text-to-Speech synthesis")
+    pipeline._generate_speech()
+    print("80% Starting audio separation and enhancement")
+    video_translation = pipeline._merge(pipeline.config.dubbing_algo)
+    print("95% Generating subtitle files")
+    source_srt, translated_srt = pipeline.generate_srt_files()
+    print("100% Done")
+    print("Output:", video_translation.processed_video.file_path)
+    return video_translation
+
+
 if __name__ == "__main__":
-    test_video_translation_local()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "local":
+        # Usage: python main.py local <video> [asr_backend] [translation_backend] [tts_engine]
+        # Examples:
+        #   python main.py local video.mp4
+        #   python main.py local video.mp4 openai openai elevenlabs
+        video = sys.argv[2] if len(sys.argv) > 2 else "test_videos/tanks.mp4"
+        asr_b = sys.argv[3] if len(sys.argv) > 3 else "qwen"
+        tr_b = sys.argv[4] if len(sys.argv) > 4 else "local"
+        tts_e = sys.argv[5] if len(sys.argv) > 5 else "elevenlabs"
+        test_local_file(video, asr_backend=asr_b, translation_backend=tr_b, tts_engine=tts_e)
+    else:
+        test_video_translation_local()

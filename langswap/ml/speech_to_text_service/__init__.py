@@ -5,10 +5,9 @@ from logging import getLogger
 
 from langswap.ml.ffmpeg import FFmpegClient
 from langswap.file_repository import FileRepository
-from langswap.ml.speech_to_text_service import asr_client
 from langswap.pipeline_models.models import RemoteFile
 from langswap.pipeline_models.models import TextedSegment, VideoTranslation
-from langswap.ml.speech_to_text_service.asr_client import ASRX
+from langswap.ml.speech_to_text_service.asr_qwen_client import QwenASRX
 from langswap.ml.speech_to_text_service.vad_client import VadClient
 from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
 
@@ -17,17 +16,34 @@ logger = getLogger(__name__)
 
 class SpeechToTextManager:
 
-    def __init__(self, language, public_id: str, file_repository: FileRepository, device, logger, skip_diarization: bool = False):
+    def __init__(
+        self,
+        language,
+        public_id: str,
+        file_repository: FileRepository,
+        device,
+        logger,
+        skip_diarization: bool = False,
+        backend: str = "qwen",
+    ):
         """
         Initializes the SpeechToTextManager.
 
-        Sets up the ASR client, file repository, logger, and other configurations.
-
         Args:
-            skip_diarization: If True, skips speaker diarization (useful when pyannote models are not available)
+            skip_diarization: If True, skips speaker diarization.
+            backend: ASR backend to use.  "qwen" (default) uses Qwen3-ASR +
+                     Qwen3-ForcedAligner.  "whisperx" uses the original
+                     WhisperX pipeline.
         """
         self.public_id = public_id
-        self._asr_client = ASRX(device=device, language=language, skip_diarization=skip_diarization)
+        if backend == "qwen":
+            self._asr_client = QwenASRX(device=device, language=language, skip_diarization=skip_diarization)
+        elif backend == "openai":
+            from langswap.ml.speech_to_text_service.asr_openai_client import OpenAIASRClient
+            self._asr_client = OpenAIASRClient(device=device, language=language, skip_diarization=skip_diarization)
+        else:
+            from langswap.ml.speech_to_text_service.asr_client import ASRX
+            self._asr_client = ASRX(device=device, language=language, skip_diarization=skip_diarization)
         self._file_repository = file_repository
         self.logger = logger
 

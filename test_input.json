@@ -1,9 +1,12 @@
 {
   "input": {
-    "source_language": "english",
-    "target_language": "russian",
-    "tts_engine": "qwen3",
-    "watermark": true,
-    "s3_video_url": "https://storage.yandexcloud.net/langswap-videos-dev/source_linked_lists.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=YCAJEHb66M9f2KjixgUYKyLja%2F20260202%2Fru-central1%2Fs3%2Faws4_request&X-Amz-Date=20260202T160751Z&X-Amz-Expires=2592000&X-Amz-Signature=a0cb4b4e080edfc6124f77b5b8e825b2ea4257c3d285bb31a5b9dcd9dc36eae8&X-Amz-SignedHeaders=host&response-content-disposition=attachment"
+    "source_language": "russian",
+    "target_language": "english",
+    "tts_engine": "elevenlabs",
+    "asr_backend": "openai",
+    "translation_backend": "openai",
+    "watermark": false,
+    "s3_video_url": "https://storage.yandexcloud.net/langswap-public/ru_source/1.mp4",
+    "dubbing_algo": "speedup"
   }
 }

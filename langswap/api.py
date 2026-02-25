@@ -77,10 +77,12 @@ def process_translation(input, progress_callback=None):
         device='cuda',
         voice_conv=False,
         tts_model=tts_engine,
-        dubbing_algo="speedup",
+        dubbing_algo=input.get("dubbing_algo", "speedup"),
         eleven_api_token=input.get("token", None),
-        watermark=input.get("watermark", True)
-    ) 
+        watermark=input.get("watermark", True),
+        asr_backend=input.get("asr_backend", "qwen"),
+        translation_backend=input.get("translation_backend", "local"),
+    )
     
     pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
     

@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv",
     "huggingface_hub>=0.20.0",
     # Add other dependencies from requirements.txt
+    "elevenlabs>=2.36.1",
 ]
 
 [project.optional-dependencies]
@@ -24,10 +25,6 @@ dev = [
     "pytest",
     "black",
     "flake8",
-]
-qwen3 = [
-    "qwen-tts",
-    "soundfile",
 ]
 
 [project.scripts]
