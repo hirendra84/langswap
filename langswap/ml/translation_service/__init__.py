@@ -26,6 +26,9 @@ class TranslationManager:
         if backend == "openai":
             from langswap.ml.translation_service.translator_openai_client import OpenAITranslationClient
             self._translator_client = OpenAITranslationClient(device=self.device)
+        elif backend == "vllm":
+            from langswap.ml.translation_service.translator_vllm_client import VLLMTranslationClient
+            self._translator_client = VLLMTranslationClient(device=self.device)
         else:
             model_path = os.getenv("LANGSWAP_TRANSLATEGEMMA_MODEL")
             self._translator_client = LLMTranslationClient(self.device, model_path=model_path)

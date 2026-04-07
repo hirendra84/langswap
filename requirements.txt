@@ -13,8 +13,9 @@ huggingface_hub>=0.20.0
 # See Dockerfile / Makefile for the two-step install.
 # qwen-asr   ← installed via: uv pip install qwen-asr --no-deps
 
-# TTS
-omnivoice
+# vLLM (translation + TTS backend)
+vllm
+vllm-omni
 # qwen-tts hard-pins transformers==4.57.3, installed separately with --no-deps (optional/legacy)
 # qwen-tts   ← uv pip install qwen-tts --no-deps
 soundfile

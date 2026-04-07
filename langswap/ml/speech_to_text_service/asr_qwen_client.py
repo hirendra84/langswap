@@ -203,6 +203,30 @@ class QwenASRX:
             ) from e
 
         model_dtype, device_map = self._best_device()
+        is_cuda = isinstance(device_map, str) and device_map.startswith("cuda")
+
+        # On CUDA, prefer the vllm backend — it bypasses the transformers
+        # model-loading code that conflicts with transformers 5.x.
+        # The vllm backend uses Qwen3ASRModel.LLM() (not from_pretrained).
+        # On Mac/CPU we fall back to the transformers backend.
+        if is_cuda:
+            try:
+                import vllm  # noqa: F401 — just check availability
+                self.asr_model = Qwen3ASRModel.LLM(
+                    model=self.asr_model_id,
+                    forced_aligner=self.aligner_model_id,
+                    # forced_aligner is still loaded via transformers, so dtype/device_map are fine
+                    forced_aligner_kwargs={"dtype": model_dtype, "device_map": device_map},
+                    # vllm.LLM kwargs: dtype as string, no device_map
+                    dtype="bfloat16",
+                    trust_remote_code=True,
+                )
+                logger.info("qwen-asr loaded with vllm backend")
+                return
+            except ImportError:
+                logger.info("vllm not available, falling back to transformers backend for qwen-asr")
+
+        # Transformers backend (Mac/CPU or when vllm is not installed)
         self.asr_model = Qwen3ASRModel.from_pretrained(
             self.asr_model_id,
             forced_aligner=self.aligner_model_id,
@@ -210,6 +234,7 @@ class QwenASRX:
             dtype=model_dtype,
             device_map=device_map,
         )
+        logger.info("qwen-asr loaded with transformers backend")
 
     def _load_diarize_model(self):
         try:

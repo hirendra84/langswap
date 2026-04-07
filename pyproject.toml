@@ -39,3 +39,6 @@ version = {file = "langswap/__VERSION__"}
 include = ["langswap*"]
 exclude = ["tests*", "notebooks*"] 
 #, "F5-TTS*", "coqui*", "resemble*"]
+
+[tool.setuptools.package-data]
+"langswap.ml.text_to_speech_service" = ["configs/*.yaml"]

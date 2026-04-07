@@ -64,7 +64,7 @@ class TranslationPipelineConfig:
     watermark: bool = field(default=False)
     skip_diarization: bool = field(default=False)  # Skip speaker diarization (useful when pyannote models unavailable)
     asr_backend: str = field(default="qwen")  # "qwen" | "whisperx" | "openai"
-    translation_backend: str = field(default="local")  # "local" | "openai"
+    translation_backend: str = field(default="local")  # "local" | "vllm" | "openai"
 
 
 
