@@ -11,7 +11,6 @@ from langswap.ml.text_to_speech_service import TextToSpeechManager
 from langswap.ml.translation_service import TranslationManager
 from langswap.utils.logging import Logger
 from langswap.ml.video_dubbing_manager import VideoDubbingManager
-from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
 from langswap.ml.ffmpeg import FFmpegClient
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
@@ -120,6 +119,7 @@ class VideoTranslationPipeline:
         }
 
         self.logger.file_logger.info("Step: merge backgrounds back")
+        from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
         merged_background_audio, save_sr = DemucsClient().merge_background(
                     styled_audio.file_path,
                     audio_backgrounds,

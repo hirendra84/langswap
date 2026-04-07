@@ -1,5 +1,3 @@
-import demucs
-import demucs.api
 import torch
 import torchaudio
 import os
@@ -8,9 +6,15 @@ from langswap.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbin
 
 
 class DemucsClient:
-    _separator: demucs.api.Separator
 
     def __init__(self):
+        try:
+            import demucs.api
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "Missing dependency `demucs` required for audio separation. "
+                "Install it with `pip install demucs`."
+            ) from e
         self._separator = demucs.api.Separator()
 
     def separate(self, audio_file_path: str, output_directory: str) -> list[tuple[str, str]]:
@@ -28,6 +32,7 @@ class DemucsClient:
             for file, source in separated[1].items():
                 file_name = f'{file}.wav'
                 generated_file_path = os.path.join(output_directory, file_name)
+                import demucs.api
                 demucs.api.save_audio(source, generated_file_path, samplerate=self._separator.samplerate)
 
                 background_files.append((generated_file_path, file_name))

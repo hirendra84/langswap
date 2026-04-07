@@ -157,11 +157,49 @@ class QwenASRX:
             self._load_diarize_model()
 
     def _load_asr_model(self):
+        # ── transformers 5.x compatibility shims for qwen-asr 0.0.6 ──────────
+        # qwen-asr was built against transformers 4.57.6.  Several internals it
+        # relies on were removed or renamed in 5.x.  We patch them back in-process
+        # before importing qwen_asr so no code changes to the upstream package are
+        # needed.
+
+        # 1. check_model_inputs — removed from transformers.utils.generic in 5.x.
+        import transformers.utils.generic as _tug
+        if not hasattr(_tug, "check_model_inputs"):
+            def _check_model_inputs():
+                def _decorator(fn):
+                    return fn
+                return _decorator
+            _tug.check_model_inputs = _check_model_inputs
+
+        # 2. ROPE_INIT_FUNCTIONS['default'] — the plain RoPE variant was removed
+        #    from the registry in 5.x.  Re-add it using the standard formula:
+        #    inv_freq = 1 / (base ** (2i / dim)).
+        from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+        if "default" not in ROPE_INIT_FUNCTIONS:
+            import torch
+
+            def _default_rope_init(config, device=None, **kwargs):
+                base = getattr(config, "rope_theta", 10000)
+                head_dim = getattr(config, "head_dim", None) or (
+                    config.hidden_size // config.num_attention_heads
+                )
+                # Create on CPU; register_buffer in the caller handles device
+                # placement.  Avoid .to(device) here — during device_map loading
+                # transformers uses meta-tensor context that intercepts .to() and
+                # raises "Cannot copy out of meta tensor".
+                inv_freq = 1.0 / (
+                    base ** (torch.arange(0, head_dim, 2).float() / head_dim)
+                )
+                return inv_freq, 1.0
+
+            ROPE_INIT_FUNCTIONS["default"] = _default_rope_init
+
         try:
             from qwen_asr import Qwen3ASRModel
         except ModuleNotFoundError as e:
             raise ModuleNotFoundError(
-                "Missing dependency `qwen-asr`. Install with: pip install -U qwen-asr"
+                "Missing dependency `qwen-asr`. Install with: pip install qwen-asr --no-deps"
             ) from e
 
         model_dtype, device_map = self._best_device()

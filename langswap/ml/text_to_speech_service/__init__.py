@@ -89,6 +89,10 @@ class TextToSpeechManager:
             from langswap.ml.text_to_speech_service.tts_qwen3_client import Qwen3TTSClient
 
             self._tts_client = Qwen3TTSClient(device=device)
+        elif name == "omnivoice":
+            from langswap.ml.text_to_speech_service.tts_omnivoice_client import OmniVoiceClient
+
+            self._tts_client = OmniVoiceClient(device=device)
         else:
             raise ValueError(f"Unknown TTS engine: {name}")
 

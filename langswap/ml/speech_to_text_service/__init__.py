@@ -9,7 +9,6 @@ from langswap.pipeline_models.models import RemoteFile
 from langswap.pipeline_models.models import TextedSegment, VideoTranslation
 from langswap.ml.speech_to_text_service.asr_qwen_client import QwenASRX
 from langswap.ml.speech_to_text_service.vad_client import VadClient
-from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
 
 logger = getLogger(__name__)
 
@@ -82,6 +81,7 @@ class SpeechToTextManager:
     def _separate_vocals_and_background(self, audio_file_path: str) -> Dict[str, str]:
         """Separates vocals from background audio using Demucs."""
         self.logger.file_logger.info('Step: Demucs separation')
+        from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
         background_paths = DemucsClient().separate(audio_file_path, self._file_repository.subdir('background_files'))
         self._file_repository.save_dir(self._file_repository.subdir('background_files'))
         return {name: path for path, name in background_paths}

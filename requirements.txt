@@ -7,10 +7,16 @@ transformers
 huggingface_hub>=0.20.0
 
 # ASR (qwen backend)
-qwen-asr
+# qwen-asr is installed separately with --no-deps because it hard-pins
+# transformers==4.57.6, which conflicts with omnivoice (needs transformers>=5.x).
+# Its code works fine on transformers 5.x; the pin is just upstream conservatism.
+# See Dockerfile / Makefile for the two-step install.
+# qwen-asr   ← installed via: uv pip install qwen-asr --no-deps
 
-# TTS (qwen3)
-qwen-tts
+# TTS
+omnivoice
+# qwen-tts hard-pins transformers==4.57.3, installed separately with --no-deps (optional/legacy)
+# qwen-tts   ← uv pip install qwen-tts --no-deps
 soundfile
 
 # Audio processing

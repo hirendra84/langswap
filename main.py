@@ -196,7 +196,7 @@ def test_local_file(
     local_video_path: str,
     source_language: str = "russian",
     target_language: str = "english",
-    tts_engine: str = "qwen3",
+    tts_engine: str = "omnivoice",
     device: str = "mps",
     skip_diarization: bool = True,
     asr_backend: str = "qwen",
@@ -255,14 +255,17 @@ def test_local_file(
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "local":
-        # Usage: python main.py local <video> [asr_backend] [translation_backend] [tts_engine]
+        # Usage: python main.py local <video> [asr] [translation] [tts] [src_lang] [tgt_lang]
         # Examples:
         #   python main.py local video.mp4
-        #   python main.py local video.mp4 openai openai elevenlabs
+        #   python main.py local video.mp4 openai openai omnivoice english russian
         video = sys.argv[2] if len(sys.argv) > 2 else "test_videos/tanks.mp4"
         asr_b = sys.argv[3] if len(sys.argv) > 3 else "qwen"
-        tr_b = sys.argv[4] if len(sys.argv) > 4 else "local"
-        tts_e = sys.argv[5] if len(sys.argv) > 5 else "elevenlabs"
-        test_local_file(video, asr_backend=asr_b, translation_backend=tr_b, tts_engine=tts_e)
+        tr_b  = sys.argv[4] if len(sys.argv) > 4 else "local"
+        tts_e = sys.argv[5] if len(sys.argv) > 5 else "omnivoice"
+        src_l = sys.argv[6] if len(sys.argv) > 6 else "russian"
+        tgt_l = sys.argv[7] if len(sys.argv) > 7 else "english"
+        test_local_file(video, source_language=src_l, target_language=tgt_l,
+                        asr_backend=asr_b, translation_backend=tr_b, tts_engine=tts_e)
     else:
         test_video_translation_local()
