@@ -325,12 +325,11 @@ class VideoDubbingManager:
             df.loc[idx, "time_dif"] = time_dif
             
             if time_dif < 0:
-                # TODO: check that it is not negative (!)
                 df.loc[idx, "pause"] -= time_dif
             else:
                 df.loc[idx, "pause"] += time_dif
 
-            pause = torch.zeros((1, int(df.loc[idx, "pause"] * sr_generated)))
+            pause = torch.zeros((1, max(0, int(df.loc[idx, "pause"] * sr_generated))))
 
             df.loc[idx, "generated_audio_length"] = audio_length
             df.loc[idx, "generated_audio_pause"] = pause.shape[1] / sr_generated

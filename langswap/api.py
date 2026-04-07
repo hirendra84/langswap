@@ -78,8 +78,9 @@ def process_translation(input, progress_callback=None):
         voice_conv=False,
         tts_model=tts_engine,
         dubbing_algo=input.get("dubbing_algo", "speedup"),
-        eleven_api_token=input.get("token", None),
+        eleven_api_token=input.get("token") or os.environ.get("ELEVEN_API_KEY"),
         watermark=input.get("watermark", True),
+        skip_diarization=input.get("skip_diarization", False),
         asr_backend=input.get("asr_backend", "qwen"),
         translation_backend=input.get("translation_backend", "local"),
     )

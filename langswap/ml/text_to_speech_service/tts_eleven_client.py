@@ -25,7 +25,7 @@ class ElevenTTSClient:
     def clone_voice(self, video_translation, voice_descr: str = "", voice_name=""):
         # If a preset voice is configured, use it without cloning.
         if self._preset_voice_id:
-            return self._make_voice_ref(self._preset_voice_id)
+            return self._make_voice_ref(self._preset_voice_id), False
 
         audio_files_source = [s.source_file for s in video_translation.translated_texts]
         file_handles = [open(f, "rb") for f in audio_files_source[:24]]
@@ -35,25 +35,42 @@ class ElevenTTSClient:
                 description=voice_descr,
                 files=file_handles,
             )
+        except Exception as e:
+            body = getattr(e, "body", None)
+            status = (body or {}).get("detail", {}).get("status", "") if isinstance(body, dict) else ""
+            if status == "voice_too_short":
+                # Source clip too short for IVC — fall back to first available premade voice
+                voices = self.client.voices.get_all()
+                premade = [v for v in voices.voices if v.category == "premade"]
+                if premade:
+                    return self._make_voice_ref(premade[0].voice_id), False
+            if body:
+                raise RuntimeError(f"ElevenLabs IVC clone failed: {body}") from e
+            raise
         finally:
             for fh in file_handles:
                 fh.close()
 
-        return voice
+        return voice, True
 
     def generate_audio(self, text: str, voice, save_path: str, source_text=None):
-        audio = self.client.text_to_speech.convert(
-            voice_id=voice.voice_id,
-            text=text,
-            output_format="mp3_44100_128",
-        )
-        save(audio, save_path)
+        try:
+            audio = self.client.text_to_speech.convert(
+                voice_id=voice.voice_id,
+                text=text,
+                output_format="mp3_44100_128",
+            )
+            save(audio, save_path)
+        except Exception as e:
+            body = getattr(e, "body", None)
+            if body:
+                raise RuntimeError(f"ElevenLabs TTS failed: {body}") from e
+            raise
 
     def tts_pipeline(
         self, video_translation, temp_folder: str, language="en"
     ) -> list[TranslatedTextedSegment]:
-        cloned = self._preset_voice_id is None
-        voice = self.clone_voice(video_translation)
+        voice, cloned = self.clone_voice(video_translation)
 
         for idx, segment in enumerate(
             tqdm(
