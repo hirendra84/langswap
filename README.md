@@ -23,7 +23,7 @@ _📽️ demo GIF coming soon_
 Speech recognition → translation → voice-cloned text-to-speech → dubbing → a finished video with subtitles. No cloud services, no per-minute fees.
 
 ```
-🎙️ Qwen3-ASR  →  🌐 Gemma  →  🗣️ OmniVoice  →  🎚️ dubbing  →  🎬 video + SRT
+🎙️ ASR  →  🌐 LLM Tranlation  →  🗣️ TTS  →  🎚️ dubbing  →  🎬 video + SRT
 ```
 
 - 🌍 **Any language pair** — auto-detects the source, dubs into your target
@@ -52,28 +52,6 @@ Open **http://localhost:7860**, drop in a video, pick a target language. Done.
 
 > **Needs:** an NVIDIA GPU + the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 > **First run:** download weights into `./models_weights` with `langswap-download-models --all` (set `HF_TOKEN` for gated models like Gemma). Missing models are fetched on demand if `HF_TOKEN` is set.
-
----
-
-## ⚙️ Configuration
-
-Create a `.env` in the project root — it's loaded automatically:
-
-```bash
-HF_TOKEN=hf_xxxxxxxxxxxxxxxxx            # gated models (Gemma, pyannote)
-ELEVEN_API_KEY=...                       # only for the ElevenLabs TTS backend
-MODEL_WEIGHTS_DIR=./models_weights       # where weights live (mounted into Docker)
-LANGSWAP_DATA_DIR=./data                 # where outputs/artifacts go
-```
-
-| Variable | Purpose |
-| --- | --- |
-| `HF_TOKEN` | HuggingFace token for gated models (Gemma, pyannote) |
-| `ELEVEN_API_KEY` | ElevenLabs key — only for the `elevenlabs` TTS backend |
-| `MODEL_WEIGHTS_DIR` | Where weights are stored/loaded (default `./models_weights`) |
-| `LANGSWAP_DATA_DIR` | Where outputs and intermediate artifacts go (default `data/`) |
-
-Full list — model overrides, GPU tuning, alternative backends — is in **[docs/ADVANCED.md](docs/ADVANCED.md)**.
 
 ---
 
