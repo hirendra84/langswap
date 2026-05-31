@@ -75,6 +75,17 @@ class Qwen3TTSClient:
             ) from e
 
         try:
+            # transformers 5.x compat: qwen-tts imports `check_model_inputs`,
+            # which was removed in transformers 5.x. Re-add a no-op so the
+            # import succeeds regardless of which backend loaded first.
+            import transformers.utils.generic as _tug
+            if not hasattr(_tug, "check_model_inputs"):
+                def _check_model_inputs(*_a, **_k):
+                    def _decorator(fn):
+                        return fn
+                    return _decorator
+                _tug.check_model_inputs = _check_model_inputs
+
             from qwen_tts import Qwen3TTSModel
         except ModuleNotFoundError as e:
             raise ModuleNotFoundError(

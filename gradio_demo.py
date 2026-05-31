@@ -25,14 +25,9 @@ from typing import Optional
 import gradio as gr
 from dotenv import load_dotenv
 
-# Load .env (HF_TOKEN, ELEVEN_API_KEY, LANGSWAP_QWEN_ASR_URL, …) before anything
-# else reads the environment.
+# Load .env (HF_TOKEN, ELEVEN_API_KEY, …) before anything else reads the
+# environment.
 load_dotenv()
-
-# Default the ASR backend to the already-running Qwen ASR microservice instead
-# of loading a second in-process vLLM copy on the GPU.  The docker service maps
-# container :8000 -> host :8001 (see docker-compose.yml).  Overridable via env.
-os.environ.setdefault("LANGSWAP_QWEN_ASR_URL", "http://localhost:8001")
 
 from langswap.file_repository import LocalOnlyFileRepository
 from langswap.model_downloader import (
@@ -53,7 +48,7 @@ LANGUAGES = ["english", "russian", "spanish", "french", "german", "italian",
              "japanese", "korean", "chinese"]
 
 TTS_ENGINES = ["omnivoice", "xtts", "f5tts", "chatterbox", "qwen3", "elevenlabs"]
-ASR_BACKENDS = ["qwen", "qwen_remote", "whisperx", "openai"]
+ASR_BACKENDS = ["qwen", "whisperx", "openai"]
 TRANSLATION_BACKENDS = ["local", "vllm", "openai"]
 DUBBING_ALGOS = ["speedup", "stretch_whole", "pause_based"]
 
@@ -209,7 +204,7 @@ def build_ui() -> gr.Blocks:
 
                 with gr.Accordion("Models / backends", open=False):
                     tts_engine = gr.Dropdown(TTS_ENGINES, value="omnivoice", label="TTS engine")
-                    asr_backend = gr.Dropdown(ASR_BACKENDS, value="qwen_remote", label="ASR backend")
+                    asr_backend = gr.Dropdown(ASR_BACKENDS, value="qwen", label="ASR backend")
                     translation_backend = gr.Dropdown(
                         TRANSLATION_BACKENDS, value="local", label="Translation backend"
                     )

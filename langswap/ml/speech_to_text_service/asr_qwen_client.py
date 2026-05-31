@@ -72,8 +72,7 @@ class TranscriptionData:
 # of voiceless consonants (so we don't split on articulation) yet low enough to
 # keep every linguistically meaningful pause. Splitting here makes the silence a
 # gap *between* segments, which is the only pause the downstream merge reinserts.
-# NOTE: keep this in sync with the same constant in asr_remote_client.py and the
-# _remap_pauses default in __init__.py.
+# NOTE: keep this in sync with the _remap_pauses default in __init__.py.
 PAUSE_THRESHOLD_SECONDS = 0.25
 
 
