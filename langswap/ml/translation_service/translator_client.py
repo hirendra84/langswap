@@ -9,6 +9,24 @@ from tqdm import tqdm
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 from langswap.model_downloader import ensure_translategemma_model
 
+
+_LANG_CODE_TO_NAME = {
+    "en": "English", "ru": "Russian", "es": "Spanish", "fr": "French",
+    "de": "German", "it": "Italian", "pt": "Portuguese", "pl": "Polish",
+    "nl": "Dutch", "tr": "Turkish", "ar": "Arabic", "hi": "Hindi",
+    "ja": "Japanese", "ko": "Korean", "zh": "Chinese", "uk": "Ukrainian",
+    "cs": "Czech", "sv": "Swedish", "fi": "Finnish", "no": "Norwegian",
+    "da": "Danish", "el": "Greek", "he": "Hebrew", "id": "Indonesian",
+    "vi": "Vietnamese", "th": "Thai", "ro": "Romanian", "hu": "Hungarian",
+}
+
+
+def _lang_full_name(code: str) -> str:
+    if not code:
+        return "the target language"
+    return _LANG_CODE_TO_NAME.get(code.lower(), code)
+
+
 class TranslatorClient(ABC):
 
     def __init__(self, device: str):
@@ -20,35 +38,86 @@ class TranslatorClient(ABC):
 
 class LLMTranslationClient(TranslatorClient):
     """
-    TranslateGemma via Hugging Face Transformers.
-    Uses the model's chat template (recommended by the model card).
-    Models are automatically downloaded on first use.
+    Generic HuggingFace Transformers translation client.
+
+    Supports two prompt styles:
+    - ``translategemma`` — uses the TranslateGemma-specific chat template
+      that expects ``source_lang_code`` / ``target_lang_code`` keys.
+    - ``instruction`` — plain instruction prompt suitable for generic
+      instruction-tuned models (e.g. Gemma-4 / Gemma-3n).
+    - ``auto`` (default) — picks ``translategemma`` if the model path
+      contains "translategemma", otherwise ``instruction``.
+
+    Models are auto-downloaded on first use.
     """
 
     def __init__(
         self,
         device: str = "cuda",
         model_path: Optional[str] = None,
+        prompt_style: str = "auto",
     ):
         super().__init__(device)
-        # Auto-download model if not present
         self.model_path = str(ensure_translategemma_model(model_path))
         self.model = None
         self.tokenizer = None
+        # For Gemma-4 (and other multimodal models) the chat template lives on
+        # the processor, not the tokenizer.  When present we prefer it.
+        self.processor = None
+        self.prompt_style = self._resolve_prompt_style(prompt_style)
+
+    def _resolve_prompt_style(self, style: str) -> str:
+        if style != "auto":
+            return style
+        return "translategemma" if "translategemma" in self.model_path.lower() else "instruction"
 
     def load_models(self):
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_path,
             local_files_only=True,  # Model already downloaded by ensure_translategemma_model
         )
 
+        # Prefer the processor's chat template when it carries one (Gemma-4 keeps
+        # the chat template on the processor, not the tokenizer).
+        try:
+            from transformers import AutoProcessor
+
+            processor = AutoProcessor.from_pretrained(
+                self.model_path,
+                local_files_only=True,
+            )
+            if getattr(processor, "chat_template", None):
+                self.processor = processor
+        except Exception:
+            self.processor = None
+
         torch_dtype = torch.bfloat16 if torch.cuda.is_available() else None
         device_map = "auto" if torch.cuda.is_available() else None
 
-        self.model = AutoModelForCausalLM.from_pretrained(
+        # Multimodal Gemma checkpoints (e.g. gemma-3-4b-it /
+        # Gemma{3,4}ForConditionalGeneration) nest the language model under a
+        # vision-text wrapper, so AutoModelForCausalLM would mismatch the weight
+        # prefixes.  Pick the image-text-to-text class for those and the plain
+        # causal-LM class for text-only Gemmas (e.g. gemma-2-2b-it).
+        config = AutoConfig.from_pretrained(self.model_path, local_files_only=True)
+        architectures = getattr(config, "architectures", None) or []
+        is_multimodal = any(
+            ("ConditionalGeneration" in a) or ("ImageTextToText" in a) or ("MultimodalLM" in a)
+            for a in architectures
+        )
+        model_cls = AutoModelForCausalLM
+        if is_multimodal:
+            try:
+                from transformers import AutoModelForImageTextToText
+
+                model_cls = AutoModelForImageTextToText
+            except Exception:
+                model_cls = AutoModelForCausalLM
+
+        self.model = model_cls.from_pretrained(
             self.model_path,
             torch_dtype=torch_dtype,
             device_map=device_map,
@@ -88,27 +157,47 @@ class LLMTranslationClient(TranslatorClient):
         translations: list[str] = []
         for sentence in tqdm(sentences):
             safe_sentence = (sentence or "").strip()
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "source_lang_code": source_code,
-                            "target_lang_code": target_code,
-                            "text": safe_sentence,
-                        }
-                    ],
-                }
-            ]
 
-            # TranslateGemma is designed around this chat template.
-            inputs = self.tokenizer.apply_chat_template(
+            if self.prompt_style == "translategemma":
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "source_lang_code": source_code,
+                                "target_lang_code": target_code,
+                                "text": safe_sentence,
+                            }
+                        ],
+                    }
+                ]
+            else:
+                src_full = _lang_full_name(source_code)
+                tgt_full = _lang_full_name(target_code)
+                user_prompt = (
+                    f"Translate the following text from {src_full} to {tgt_full}. "
+                    "Reply ONLY with the translation, no preamble or quotes.\n\n"
+                    f"{safe_sentence}"
+                )
+                messages = [{"role": "user", "content": user_prompt}]
+
+            # Gemma-4 keeps the chat template on the processor; fall back to the
+            # tokenizer for models (e.g. TranslateGemma) that template there.
+            chat_encoder = self.processor or self.tokenizer
+            template_kwargs = {}
+            if self.prompt_style != "translategemma":
+                # Suppress the reasoning block on instruction-tuned Gemma-4 so the
+                # output is the bare translation.  Harmless for templates that
+                # don't use the flag.
+                template_kwargs["enable_thinking"] = False
+            inputs = chat_encoder.apply_chat_template(
                 messages,
                 tokenize=True,
                 add_generation_prompt=True,
                 return_dict=True,
                 return_tensors="pt",
+                **template_kwargs,
             )
             if hasattr(self.model, "device"):
                 inputs = {k: v.to(self.model.device) for k, v in inputs.items()}

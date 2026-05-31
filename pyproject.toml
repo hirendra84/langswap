@@ -26,6 +26,9 @@ dev = [
     "black",
     "flake8",
 ]
+demo = [
+    "gradio>=4.0.0",
+]
 
 [project.scripts]
 langswap = "langswap.cli:main"

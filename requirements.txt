@@ -40,3 +40,6 @@ boto3
 
 # API clients (Mac-friendly, no local GPU)
 openai
+
+# Local demo UI
+gradio>=4.0.0

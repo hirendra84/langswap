@@ -1,0 +1,80 @@
+name: langswap
+
+services:
+
+  # Qwen3-ASR + ForcedAligner microservice.  Runs with transformers==4.57.6
+  # (qwen-asr's pin) inside an isolated container, avoiding the 5.x compat
+  # issues the main app has.
+  qwen-asr:
+    build:
+      context: ./services/qwen_asr_service
+    image: langswap/qwen-asr:latest
+    ports:
+      - "8001:8000"
+    environment:
+      # Point qwen-asr at the locally-baked weights so the container does not
+      # re-download multi-GB of model files on each start.
+      QWEN_ASR_MODEL: ${QWEN_ASR_MODEL:-/models/Qwen__Qwen3-ASR-1.7B}
+      QWEN_ALIGNER_MODEL: ${QWEN_ALIGNER_MODEL:-/models/Qwen__Qwen3-ForcedAligner-0.6B}
+      DEVICE: cuda
+      BACKEND: ${ASR_BACKEND:-auto}
+      HF_HOME: /models/huggingface
+      HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      # Mount the project's downloaded model directory read-only.  These were
+      # populated by `langswap-download-models --all` and live under
+      # ./models_weights/ (set via MODEL_WEIGHTS_DIR in .env).
+      - ./models_weights:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      start_period: 600s
+      retries: 5
+
+  # Main app — Gradio UI + the rest of the pipeline (translation, TTS, dubbing).
+  gradio:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    image: langswap/gradio:latest
+    ports:
+      - "7860:7860"
+    environment:
+      LANGSWAP_QWEN_ASR_URL: http://qwen-asr:8000
+      MODEL_WEIGHTS_DIR: /models
+      HF_HOME: /models/huggingface
+      LANGSWAP_DATA_DIR: /app/data
+      HF_TOKEN: ${HF_TOKEN:-}
+      ELEVEN_API_KEY: ${ELEVEN_API_KEY:-}
+      # Point each wrapper at the locally-baked weights, skipping HF downloads.
+      LANGSWAP_TRANSLATEGEMMA_MODEL: /models/google__gemma-3-4b-it
+      LANGSWAP_OMNIVOICE_MODEL: /models/k2-fsa__OmniVoice
+    volumes:
+      - ./models_weights:/models
+      - ./data:/app/data
+      - ./langswap:/app/langswap
+      - ./gradio_demo.py:/app/gradio_demo.py:ro
+      - ./debug_local.py:/app/debug_local.py:ro
+      # Mount the test video so debug_local can find it
+      - ./12.mp4:/app/12.mp4:ro
+    depends_on:
+      qwen-asr:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped

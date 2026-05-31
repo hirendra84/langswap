@@ -1,9 +1,14 @@
 import os
 import logging
 from pathlib import Path
+from typing import Optional
 from dotenv import load_dotenv
 
 from langswap.model_config import MODEL_WEIGHTS_DIR
+from langswap.model_downloader import (
+    ensure_qwen_aligner_model,
+    ensure_qwen_asr_model,
+)
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 import attr
@@ -13,6 +18,18 @@ import cattrs
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+# vLLM launches its EngineCore in a child process.  When the parent has already
+# initialized a CUDA context (e.g. the Gradio app probed torch.cuda for device
+# selection), a forked child cannot re-initialize CUDA and crashes with
+# "Cannot re-initialize CUDA in forked subprocess".  Force the spawn start
+# method so the worker gets a fresh process.  setdefault keeps any user override.
+os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
+
+# vLLM's FlashInfer top-k/top-p sampler JIT-compiles a CUDA kernel (needs ninja
+# + a matching nvcc) on first use.  ASR decodes greedily (temperature=0), so the
+# sampler is unnecessary — disable it to skip the fragile JIT toolchain.
+os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -105,13 +122,29 @@ class QwenASRX:
         device: str,
         language: str,
         skip_diarization: bool = False,
-        asr_model_id: str = "Qwen/Qwen3-ASR-0.6B",
-        aligner_model_id: str = "Qwen/Qwen3-ForcedAligner-0.6B",
+        asr_model_id: Optional[str] = None,
+        aligner_model_id: Optional[str] = None,
     ) -> None:
         self.device = device
         self.skip_diarization = skip_diarization
-        self.asr_model_id = asr_model_id
-        self.aligner_model_id = aligner_model_id
+
+        # Resolve to a local cache path when a model name is not explicitly
+        # provided.  An explicit HF repo id (e.g. "Qwen/Qwen3-ASR-1.7B") is
+        # respected and passed straight to the loader, which will fetch via
+        # the standard HF cache.
+        if asr_model_id is None:
+            self.asr_model_id = str(ensure_qwen_asr_model())
+        elif os.path.isdir(asr_model_id):
+            self.asr_model_id = asr_model_id
+        else:
+            self.asr_model_id = asr_model_id
+
+        if aligner_model_id is None:
+            self.aligner_model_id = str(ensure_qwen_aligner_model())
+        elif os.path.isdir(aligner_model_id):
+            self.aligner_model_id = aligner_model_id
+        else:
+            self.aligner_model_id = aligner_model_id
 
         if language is not None:
             self.language = map_language_to_code(language, system="whisper")
@@ -163,14 +196,25 @@ class QwenASRX:
         # before importing qwen_asr so no code changes to the upstream package are
         # needed.
 
-        # 1. check_model_inputs — removed from transformers.utils.generic in 5.x.
+        # 1. check_model_inputs — its signature flipped between transformers
+        # versions.  qwen-asr 0.0.6 uses `@check_model_inputs()` (factory form,
+        # returns a decorator), but transformers 5.x defines it as a direct
+        # decorator `check_model_inputs(func)`.  Force a no-op shim that
+        # accepts BOTH call styles.
         import transformers.utils.generic as _tug
-        if not hasattr(_tug, "check_model_inputs"):
-            def _check_model_inputs():
-                def _decorator(fn):
-                    return fn
-                return _decorator
-            _tug.check_model_inputs = _check_model_inputs
+
+        def _check_model_inputs_compat(*args, **kwargs):
+            if args and callable(args[0]):
+                return args[0]            # @check_model_inputs (direct)
+            return lambda fn: fn          # @check_model_inputs(...) (factory)
+
+        _tug.check_model_inputs = _check_model_inputs_compat
+        # Some modules import the symbol directly from transformers.utils too:
+        try:
+            import transformers.utils as _tu
+            _tu.check_model_inputs = _check_model_inputs_compat
+        except Exception:
+            pass
 
         # 2. ROPE_INIT_FUNCTIONS['default'] — the plain RoPE variant was removed
         #    from the registry in 5.x.  Re-add it using the standard formula:
@@ -202,6 +246,105 @@ class QwenASRX:
                 "Missing dependency `qwen-asr`. Install with: pip install qwen-asr --no-deps"
             ) from e
 
+        # 3. huggingface_hub 1.x runs `__class_validators__` inside
+        # PretrainedConfig.__init__ via @strict_dataclass.  qwen-asr 0.0.6
+        # expects validation to run AFTER it has populated `thinker_config`,
+        # and its Qwen3ASRThinkerConfig doesn't expose `pad_token_id` at all.
+        # Strip the `validate_token_ids` class-validator from every relevant
+        # config class so init goes through.
+        def _strip_token_validator(cls):
+            vlist = getattr(cls, "__class_validators__", None)
+            if not vlist:
+                return
+            cls.__class_validators__ = [
+                v for v in vlist
+                if getattr(v, "__name__", "") != "validate_token_ids"
+            ]
+
+        try:
+            from transformers.configuration_utils import PretrainedConfig as _PC
+            _strip_token_validator(_PC)
+        except Exception:
+            pass
+        # 4. transformers 5.x _init_weights expects every RotaryEmbedding
+        # module with rope_type=="default" to expose compute_default_rope_parameters.
+        # qwen-asr's RoPE modules don't.  Inject a method that follows the
+        # standard inv_freq formula.
+        try:
+            import torch as _t
+            import qwen_asr.core.transformers_backend.modeling_qwen3_asr as _qmod
+
+            def _compute_default_rope_parameters(self, config, device=None, **kwargs):
+                base = getattr(config, "rope_theta", 10000)
+                head_dim = getattr(config, "head_dim", None) or (
+                    config.hidden_size // config.num_attention_heads
+                )
+                inv_freq = 1.0 / (
+                    base ** (_t.arange(0, head_dim, 2).float() / head_dim)
+                )
+                return inv_freq, 1.0
+
+            for _name in dir(_qmod):
+                _cls = getattr(_qmod, _name, None)
+                if (
+                    isinstance(_cls, type)
+                    and "RotaryEmbedding" in _cls.__name__
+                    and not hasattr(_cls, "compute_default_rope_parameters")
+                ):
+                    _cls.compute_default_rope_parameters = _compute_default_rope_parameters
+        except Exception:
+            pass
+
+        try:
+            from qwen_asr.core.transformers_backend.configuration_qwen3_asr import (
+                Qwen3ASRConfig as _QASRConfig,
+            )
+            _strip_token_validator(_QASRConfig)
+
+            # In Qwen3-ASR-1.7B the per-sub-config schemas no longer expose
+            # token-id fields that the (older) qwen-asr modeling code reads
+            # directly (config.pad_token_id, etc.).  Backfill safe defaults
+            # at the class level so attribute access returns None instead of
+            # raising AttributeError.
+            _TOKEN_DEFAULTS = {
+                "pad_token_id": None,
+                "bos_token_id": None,
+                "eos_token_id": None,
+                "decoder_start_token_id": None,
+            }
+            for _sub in (
+                "Qwen3ASRThinkerConfig",
+                "Qwen3ASRAudioConfig",
+                "Qwen3ASRTalkerConfig",
+            ):
+                _cls = getattr(
+                    __import__(
+                        "qwen_asr.core.transformers_backend.configuration_qwen3_asr",
+                        fromlist=[_sub],
+                    ),
+                    _sub,
+                    None,
+                )
+                if _cls is None:
+                    continue
+                _strip_token_validator(_cls)
+                for _attr, _default in _TOKEN_DEFAULTS.items():
+                    if not hasattr(_cls, _attr):
+                        setattr(_cls, _attr, _default)
+
+            # Also harden get_text_config for the case where thinker_config is
+            # not yet set when an outer validator runs.
+            _orig_get_text_config = _QASRConfig.get_text_config
+
+            def _patched_get_text_config(self, *args, **kwargs):
+                if not hasattr(self, "thinker_config") or self.thinker_config is None:
+                    return self
+                return _orig_get_text_config(self, *args, **kwargs)
+
+            _QASRConfig.get_text_config = _patched_get_text_config
+        except Exception:
+            pass
+
         model_dtype, device_map = self._best_device()
         is_cuda = isinstance(device_map, str) and device_map.startswith("cuda")
 
@@ -212,6 +355,15 @@ class QwenASRX:
         if is_cuda:
             try:
                 import vllm  # noqa: F401 — just check availability
+                # vLLM defaults to gpu_memory_utilization=0.9+, which fails when
+                # the GPU is shared (other pipeline models, a remote ASR service,
+                # etc.).  Cap it (overridable) so ASR fits alongside translation/
+                # TTS on a single GPU.
+                gpu_util = float(os.getenv("LANGSWAP_QWEN_ASR_GPU_UTIL", "0.5"))
+                # Cap context length too: the default (65536) demands ~7 GiB of
+                # KV cache, which won't fit under a modest gpu_memory_utilization.
+                # ASR segments are short, so a smaller window is plenty.
+                max_model_len = int(os.getenv("LANGSWAP_QWEN_ASR_MAX_LEN", "16384"))
                 self.asr_model = Qwen3ASRModel.LLM(
                     model=self.asr_model_id,
                     forced_aligner=self.aligner_model_id,
@@ -220,8 +372,13 @@ class QwenASRX:
                     # vllm.LLM kwargs: dtype as string, no device_map
                     dtype="bfloat16",
                     trust_remote_code=True,
+                    gpu_memory_utilization=gpu_util,
+                    max_model_len=max_model_len,
                 )
-                logger.info("qwen-asr loaded with vllm backend")
+                logger.info(
+                    "qwen-asr loaded with vllm backend (gpu_memory_utilization=%s, max_model_len=%s)",
+                    gpu_util, max_model_len,
+                )
                 return
             except ImportError:
                 logger.info("vllm not available, falling back to transformers backend for qwen-asr")

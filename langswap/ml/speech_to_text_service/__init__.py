@@ -35,9 +35,20 @@ class SpeechToTextManager:
                      WhisperX pipeline.
         """
         self.public_id = public_id
-        if backend == "qwen":
+
+        # If LANGSWAP_QWEN_ASR_URL is set, default the "qwen" backend to the
+        # remote Docker service — sidesteps the transformers-5.x compat issues
+        # the in-process loader has with qwen-asr 0.0.6.
+        resolved_backend = backend
+        if backend == "qwen" and os.environ.get("LANGSWAP_QWEN_ASR_URL"):
+            resolved_backend = "qwen_remote"
+
+        if resolved_backend == "qwen_remote":
+            from langswap.ml.speech_to_text_service.asr_remote_client import QwenASRRemoteClient
+            self._asr_client = QwenASRRemoteClient(device=device, language=language, skip_diarization=skip_diarization)
+        elif resolved_backend == "qwen":
             self._asr_client = QwenASRX(device=device, language=language, skip_diarization=skip_diarization)
-        elif backend == "openai":
+        elif resolved_backend == "openai":
             from langswap.ml.speech_to_text_service.asr_openai_client import OpenAIASRClient
             self._asr_client = OpenAIASRClient(device=device, language=language, skip_diarization=skip_diarization)
         else:
