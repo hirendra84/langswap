@@ -67,7 +67,17 @@ class TranscriptionData:
     output: Output
 
 
-def _group_words_into_segments(words: list[dict], pause_threshold: float = 0.5) -> list[dict]:
+# Minimum silence (seconds) that counts as a real, dubbing-relevant pause.
+# 0.25 s is the standard prosodic-phrase boundary: above the ~0.18 s stop-closure
+# of voiceless consonants (so we don't split on articulation) yet low enough to
+# keep every linguistically meaningful pause. Splitting here makes the silence a
+# gap *between* segments, which is the only pause the downstream merge reinserts.
+# NOTE: keep this in sync with the same constant in asr_remote_client.py and the
+# _remap_pauses default in __init__.py.
+PAUSE_THRESHOLD_SECONDS = 0.25
+
+
+def _group_words_into_segments(words: list[dict], pause_threshold: float = PAUSE_THRESHOLD_SECONDS) -> list[dict]:
     """
     Group word-level timestamps into segments by pause length and speaker changes.
     Returns list of dicts: {text, start, end, words, speaker}

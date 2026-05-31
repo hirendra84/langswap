@@ -223,7 +223,7 @@ class SpeechToTextManager:
 
         return output_file
 
-    def _remap_pauses(self, entries: List[Dict], pause_threshold=0.9, max_length=5, min_length=3):
+    def _remap_pauses(self, entries: List[Dict], pause_threshold=0.25, max_length=5, min_length=3):
         """
         Merges raw transcribed segments into more coherent sentences or phrases.
 
@@ -241,16 +241,17 @@ class SpeechToTextManager:
             if not check_is_text(cur_sample['text']):
                 continue
             conditions = [
-                # pause is long enough and we have collected more than five seconds 
-                # change for ElevenLabs that does not condition on one audio sample
-                # ((cur_sample['start'] - prev_end) >= pause_threshold and (prev_end - start_idx >= min_length)),
-                # (cur_sample['start'] - prev_end) >= pause_threshold,
-                # we have collected max length of audio 
+                # A linguistically meaningful silence ends the current segment so the
+                # gap survives as an inter-segment pause: merge_timestamps_stretch_whole
+                # reinserts silence only *between* segments, never inside one. The split
+                # is intentionally NOT gated on min_length — a long pause after a short
+                # utterance must still be preserved, otherwise the dub drifts ahead of
+                # the source (this gating is what broke pause handling on Qwen ASR).
+                (cur_sample['start'] - prev_end) >= pause_threshold,
+                # we have collected max length of audio
                 (prev_end - start_idx > max_length),
-                
                 # speaker changed
                 cur_speaker != cur_sample['speaker'],
-                # not (prev_end - start_idx < 0.6)
                 ]
             # print(f"what conditions are fullfilled {conditions}")
             # если пауза достаточно длинная и при этом мы собрали уже около 5 секунд или уже собрали больше 15 секунд

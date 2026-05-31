@@ -45,7 +45,13 @@ class TranscriptionData:
     output: Output
 
 
-def _group_words_into_segments(words: list[dict], pause_threshold: float = 0.5) -> list[dict]:
+# Minimum silence (seconds) that counts as a real, dubbing-relevant pause.
+# See the rationale next to the same constant in asr_qwen_client.py — keep both
+# (and the _remap_pauses default in __init__.py) in sync.
+PAUSE_THRESHOLD_SECONDS = 0.25
+
+
+def _group_words_into_segments(words: list[dict], pause_threshold: float = PAUSE_THRESHOLD_SECONDS) -> list[dict]:
     if not words:
         return []
     segments = []
