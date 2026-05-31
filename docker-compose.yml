@@ -1,4 +1,18 @@
-name: langswap
+# Standalone stack: Qwen3-ASR microservice + Gradio UI.
+#
+# Runs only the two services needed to serve the demo:
+#   - qwen-asr : Qwen3-ASR + ForcedAligner (isolated transformers==4.57.6 env)
+#   - gradio   : Gradio UI + the rest of the pipeline (translation, TTS, dubbing)
+#
+# Unlike docker-compose.yml this file has NO dev bind-mounts of source code —
+# it runs the code baked into the images, so it is suitable for a clean deploy.
+#
+# Usage:
+#   docker compose -f docker-compose.asr-gradio.yml up --build
+#   # UI on http://localhost:7860 , ASR on http://localhost:8001
+#
+# Models are read from ./models_weights (populated by `langswap-download-models`).
+name: langswap-asr-gradio
 
 services:
 
@@ -22,9 +36,7 @@ services:
       HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
       HF_TOKEN: ${HF_TOKEN:-}
     volumes:
-      # Mount the project's downloaded model directory read-only.  These were
-      # populated by `langswap-download-models --all` and live under
-      # ./models_weights/ (set via MODEL_WEIGHTS_DIR in .env).
+      # Mount the project's downloaded model directory read-only.
       - ./models_weights:/models:ro
     deploy:
       resources:
@@ -60,13 +72,8 @@ services:
       LANGSWAP_TRANSLATEGEMMA_MODEL: /models/google__gemma-3-4b-it
       LANGSWAP_OMNIVOICE_MODEL: /models/k2-fsa__OmniVoice
     volumes:
-      - ./models_weights:/models
+      - ./models_weights:/models:ro
       - ./data:/app/data
-      - ./langswap:/app/langswap
-      - ./gradio_demo.py:/app/gradio_demo.py:ro
-      - ./debug_local.py:/app/debug_local.py:ro
-      # Mount the test video so debug_local can find it
-      - ./12.mp4:/app/12.mp4:ro
     depends_on:
       qwen-asr:
         condition: service_healthy

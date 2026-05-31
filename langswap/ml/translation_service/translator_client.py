@@ -180,7 +180,14 @@ class LLMTranslationClient(TranslatorClient):
                     "Reply ONLY with the translation, no preamble or quotes.\n\n"
                     f"{safe_sentence}"
                 )
-                messages = [{"role": "user", "content": user_prompt}]
+                # Multimodal Gemma-3/4 processors expect structured content
+                # (a list of typed parts); text-only tokenizers expect a plain
+                # string.  Match the format to whichever encoder we'll use below.
+                if self.processor is not None:
+                    content = [{"type": "text", "text": user_prompt}]
+                else:
+                    content = user_prompt
+                messages = [{"role": "user", "content": content}]
 
             # Gemma-4 keeps the chat template on the processor; fall back to the
             # tokenizer for models (e.g. TranslateGemma) that template there.

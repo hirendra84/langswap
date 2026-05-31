@@ -1,0 +1,12 @@
+# Dependency overrides for the Gradio image (Dockerfile.gradio).
+#
+# Unlike the monolithic Dockerfile, this image does NOT install qwen-asr, so it
+# is not bound by qwen-asr's transformers==4.57.6 hard pin.  vllm-omni's voice
+# cloning requires transformers>=5.3.0, so we pin to the lock-file version 5.9.0.
+#
+# vllm is also pinned to the lock version: requirements.txt leaves it unpinned,
+# so the latest (0.22.0) gets installed, but vllm-omni 0.20.0 expects a matching
+# minor and warns of likely compatibility issues.  0.21.0 is the validated pair.
+# See requirements.lock.txt.
+transformers==5.9.0
+vllm==0.21.0

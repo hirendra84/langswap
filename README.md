@@ -168,11 +168,57 @@ algorithm in the *Models / backends* accordion.
 
 Other flags: `--host`, `--port`, `--share`, `--data-dir`.
 
-### Full stack via Docker Compose
+---
+
+## 7. Full stack via Docker Compose
+
+Both services (ASR + Gradio UI and pipeline) are built and run together with Compose from a single
+file, `docker-compose.yml`. The code is baked into the images, so the stack runs exactly
+what was built.
+
+### Prerequisites
+
+- **NVIDIA Container Toolkit** installed and working (`docker run --rm --gpus all nvidia/cuda:13.0.0-base-ubuntu24.04 nvidia-smi`). Both services reserve a GPU.
+- **Model weights** already downloaded into `./models_weights` (see §3) — they are mounted into the
+  containers, *not* downloaded at build time.
+- **`.env`** in the project root with at least `HF_TOKEN` (and `ELEVEN_API_KEY` if using ElevenLabs).
+
+### Build and run
 
 ```bash
-docker compose up -d --build       # starts qwen-asr + gradio (UI on :7860, ASR on :8001)
+# clean stack (code baked into the images)
+docker compose up -d --build
+
+# build only, without starting
+docker compose build
+
+# logs / status / stop
+docker compose logs -f gradio
+docker compose ps
+docker compose down
 ```
+
+- **UI** on http://localhost:7860, **ASR** on http://localhost:8001 (inside the network: `http://qwen-asr:8000`).
+- `gradio` waits for `qwen-asr` to pass its healthcheck (`start_period` is 600s to allow model load).
+- Volumes: `./models_weights → /models` (read-only) and `./data → /app/data` (outputs).
+
+### Images and the transformers split
+
+Two images are built:
+
+- **`langswap/qwen-asr`** ([services/qwen_asr_service/Dockerfile](services/qwen_asr_service/Dockerfile)) — pins `transformers==4.57.6` (qwen-asr's hard pin), isolated in its own container.
+- **`langswap/gradio`** ([Dockerfile.gradio](Dockerfile.gradio)) — runs the rest of the pipeline on
+  `transformers==5.9.0` + `vllm==0.21.0`, which vllm-omni's voice cloning requires (needs
+  `transformers>=5.3.0`). These versions are forced via [overrides.gradio.txt](overrides.gradio.txt);
+  the monolithic [overrides.txt](overrides.txt) (`4.57.6`) is **not** used here.
+
+> **Build notes**
+> - The Gradio image is built on `ubuntu24.04` (Python 3.12 is native there; 22.04 only ships 3.10).
+> - `demucs` is built from a git sdist, which fetches `setuptools`/`wheel` from PyPI during build
+>   isolation. The Dockerfile wraps the dependency install in a retry loop and installs the editable
+>   package with `--no-build-isolation` to tolerate flaky outbound network.
+> - You will see `vLLM and vLLM-Omni appear to have mismatched major/minor versions` — this warning
+>   is expected for the locked `vllm 0.21.0` / `vllm-omni 0.20.0` pair and is harmless.
 
 ---
 
@@ -211,7 +257,8 @@ docker compose up -d --build       # starts qwen-asr + gradio (UI on :7860, ASR 
 - `debug_local.py` — local stage-by-stage CLI runner
 - `gradio_demo.py` — local browser UI
 - `services/qwen_asr_service/` — FastAPI ASR microservice (Docker)
-- `docker-compose.yml` — ASR service + Gradio app
+- `Dockerfile.gradio` / `overrides.gradio.txt` — Gradio image (pipeline on transformers 5.9 / vllm 0.21)
+- `docker-compose.yml` — ASR service + Gradio app (code baked into images)
 - `langswap/translation_pipeline.py` — pipeline orchestration
 - `langswap/ml/` — ASR / translation / TTS / dubbing implementations
 - `langswap/model_downloader.py` — model registry + `langswap-download-models` CLI
