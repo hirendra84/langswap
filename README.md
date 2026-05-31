@@ -265,4 +265,35 @@ Two images are built:
 
 ## License
 
-All rights reserved by Peace Data Inc, 2026.
+Copyright (C) 2026 Peace Data Inc.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the **GNU Affero General Public License v3.0 or later** (AGPL-3.0-or-later)
+as published by the Free Software Foundation. See [`LICENSE`](LICENSE) for the full text.
+
+The AGPL's network-use clause means that if you run a modified version of this
+software as a network service, you must make your modified source available to
+its users. If those terms don't fit your use case, a **commercial license** is
+available — contact ilya@langswap.app.
+
+### Model weights are licensed separately
+
+This repository licenses the **pipeline code only**. The models it downloads and
+runs at inference time are **not** covered by the AGPL and carry their own terms,
+some of which restrict commercial or derivative use:
+
+| Component | Model | License |
+| --- | --- | --- |
+| Translation | TranslateGemma (built on Google **Gemma**) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) — *use restrictions apply; not OSI-approved* |
+| ASR | Qwen3-ASR | Per-model on Hugging Face (Apache-2.0 or Qwen license) — verify before use |
+| TTS | `k2-fsa/OmniVoice` | See the model's Hugging Face model card |
+| ElevenLabs / OpenAI backends | Hosted APIs | Provider commercial Terms of Service |
+
+You are responsible for complying with each model's license for your use case.
+The AGPL grant on this code does **not** grant any rights to the model weights.
+
+### Contributing
+
+By submitting a contribution you agree to the terms in
+[`CONTRIBUTING.md`](CONTRIBUTING.md), which license your contribution to
+Peace Data Inc and allow it to be relicensed (including commercially).
