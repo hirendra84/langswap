@@ -4,9 +4,6 @@ import torch
 import numpy as np
 from langswap.file_repository import FileRepository
 from pyrubberband.pyrb import time_stretch
-import pandas as pd
-import numpy as np
-import torchaudio.transforms as T
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
 
@@ -242,7 +239,7 @@ class VideoDubbingManager:
         self.logger.log_json(data=df.to_dict('records'), file_name="pauses_for_stretch_whole.json")
         return audio_generated, sr_generated
     
-    def merge_timesteps_pause_based(self, video_translation, vocals_audio):
+    def merge_timestamps_pause_based(self, video_translation, vocals_audio):
         """
         Algorithm that works on filling the pauses - not the best one.
         """

@@ -30,11 +30,6 @@ class FFmpegClient:
             logger.debug(f"Command error: {process.stderr}")
         return process.stdout, process.stderr
 
-    def convert_video(self, input_path, output_path, output_format):
-        """Convert video to different formats."""
-        cmd = f"-y -i {input_path} -c:v libx264 -crf 23 -preset fast {output_path}.{output_format}"
-        return self.run_command(cmd)
-
     def extract_audio(self, input_path, output_path, time_limit: Optional[int] = None, target_sr=24000):
         """Extract audio from video."""
         cmd = f"-y -i {input_path} -vn -acodec pcm_s16le -ar {target_sr} -ac 1 -f wav {output_path}"
@@ -43,13 +38,6 @@ class FFmpegClient:
     def resample_audio(self, input_path, output_path, sample_rate: int = 16_000):
         cmd = f"-y -i {input_path} -ar {sample_rate} -f wav {output_path}"
         return self.run_command(cmd)
-
-    def get_audio_length(self, input_path) -> float:
-        cmd = f'-i {input_path} -show_entries format=duration -v quiet -of csv="p=0"'
-        res, err = self.run_command(cmd, Util.ffprobe)
-        if err:
-            raise ValueError(err)
-        return float(res)
 
     def replace_audio(self, video_input_path: str, audio_input_path: str,
                       video_output_path: str,

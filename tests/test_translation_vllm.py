@@ -71,10 +71,10 @@ def _make_client(monkeypatch, tmp_path):
     tok_dir = tmp_path / "tokenizer"
     tok_dir.mkdir()
 
-    # Patch model_downloader to return our fake paths
-    import langswap.model_downloader as md
-    monkeypatch.setattr(md, "ensure_translategemma_gguf_model", lambda p=None: gguf_file)
-    monkeypatch.setattr(md, "ensure_translategemma_tokenizer", lambda p=None: tok_dir)
+    # Patch model resolution to return our fake paths
+    from langswap.ml.translation_service import translator_vllm_client as tvc
+    monkeypatch.setattr(tvc, "_ensure_gguf", lambda p=None: str(gguf_file))
+    monkeypatch.setattr(tvc, "resolve_model", lambda *a, **k: str(tok_dir))
 
     from langswap.ml.translation_service.translator_vllm_client import VLLMTranslationClient
 
@@ -95,9 +95,9 @@ def test_lazy_load(monkeypatch, tmp_path):
     tok_dir = tmp_path / "tok"
     tok_dir.mkdir()
 
-    import langswap.model_downloader as md
-    monkeypatch.setattr(md, "ensure_translategemma_gguf_model", lambda p=None: gguf_file)
-    monkeypatch.setattr(md, "ensure_translategemma_tokenizer", lambda p=None: tok_dir)
+    from langswap.ml.translation_service import translator_vllm_client as tvc
+    monkeypatch.setattr(tvc, "_ensure_gguf", lambda p=None: str(gguf_file))
+    monkeypatch.setattr(tvc, "resolve_model", lambda *a, **k: str(tok_dir))
 
     from langswap.ml.translation_service.translator_vllm_client import VLLMTranslationClient
     client = VLLMTranslationClient(device="cpu")

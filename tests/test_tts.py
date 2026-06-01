@@ -8,6 +8,9 @@ import os
 import tempfile
 from pathlib import Path
 
+# XTTS depends on the optional `coqui` package; skip the whole module if absent.
+pytest.importorskip("coqui", reason="XTTS backend optional dependency 'coqui' not installed")
+
 from langswap.ml.text_to_speech_service.tts_xtts_client import XTTSClient
 
 

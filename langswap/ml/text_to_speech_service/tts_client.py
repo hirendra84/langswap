@@ -1,5 +1,4 @@
 from abc import ABC
-from langswap.pipeline_models.models import TranslatedTextedSegment
 
 
 class TTSClient(ABC):
@@ -12,10 +11,7 @@ class TTSClient(ABC):
 
     def generate_audio(self, text: str, source_audio_file: str, save_path: str):
         ...
-        
-    def tts_pipelene(self, data: list[TranslatedTextedSegment], output_folder: str) -> list[TranslatedTextedSegment]:
-        ...
-        
+
     def __enter__(self):
         ...
 

@@ -8,19 +8,15 @@ from f5_tts.infer.utils_infer import (
     load_model,
     infer_process,
     preprocess_ref_audio_text,
-    remove_silence_for_generated_wav,
 )
 
 from f5_tts.model import DiT
-from cached_path import cached_path
 import re
-import tomli
 import soundfile as sf
 import os
 from tqdm import tqdm
 import numpy as np
 
-import torchaudio
 from ruaccent import RUAccent
 
 

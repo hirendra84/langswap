@@ -8,7 +8,6 @@ from langswap.file_repository import FileRepository
 from langswap.pipeline_models.models import RemoteFile
 from langswap.pipeline_models.models import TextedSegment, VideoTranslation
 from langswap.ml.speech_to_text_service.asr_qwen_client import QwenASRX
-from langswap.ml.speech_to_text_service.vad_client import VadClient
 
 logger = getLogger(__name__)
 
@@ -36,19 +35,12 @@ class SpeechToTextManager:
         """
         self.public_id = public_id
 
-        # If LANGSWAP_QWEN_ASR_URL is set, default the "qwen" backend to the
-        # remote Docker service — sidesteps the transformers-5.x compat issues
-        # the in-process loader has with qwen-asr 0.0.6.
-        resolved_backend = backend
-        if backend == "qwen" and os.environ.get("LANGSWAP_QWEN_ASR_URL"):
-            resolved_backend = "qwen_remote"
-
-        if resolved_backend == "qwen_remote":
-            from langswap.ml.speech_to_text_service.asr_remote_client import QwenASRRemoteClient
-            self._asr_client = QwenASRRemoteClient(device=device, language=language, skip_diarization=skip_diarization)
-        elif resolved_backend == "qwen":
+        # Qwen3-ASR runs in-process via QwenASRX (qwen-asr installed --no-deps,
+        # made import/run-compatible with transformers 5.x by the shim in
+        # asr_qwen_client.py).  "openai" and "whisperx" are alternative backends.
+        if backend == "qwen":
             self._asr_client = QwenASRX(device=device, language=language, skip_diarization=skip_diarization)
-        elif resolved_backend == "openai":
+        elif backend == "openai":
             from langswap.ml.speech_to_text_service.asr_openai_client import OpenAIASRClient
             self._asr_client = OpenAIASRClient(device=device, language=language, skip_diarization=skip_diarization)
         else:
@@ -58,25 +50,6 @@ class SpeechToTextManager:
         self.logger = logger
 
         self.audio_extensions = ["mp3", "wav", "MP3"]
-
-    def _resample_audio(self, audio_file: RemoteFile) -> RemoteFile:
-        """
-        Resamples the input audio file and applies Voice Activity Detection (VAD).
-
-        Ensures audio is at the target sample rate and filters non-speech segments.
-        """
-        resampled_audio_file = self._file_repository.get_file(f'{audio_file.name}_resampled_{self.sample_rate}')
-        (FFmpegClient()
-         .resample_audio(audio_file.file_path,
-                         resampled_audio_file.file_path,
-                         sample_rate=self.sample_rate))
-        vad_filtered_audio_file = self._file_repository.get_file(f'{resampled_audio_file.name}_vad')
-
-        vad_filtered_audio_file.file_path = VadClient().vad_filter(
-            resampled_audio_file.file_path,
-            vad_filtered_audio_file.file_path,
-            self.sample_rate)
-        return vad_filtered_audio_file
 
     def _get_audio_file(self, video_translation: VideoTranslation) -> str:
         """Gets the audio file path, extracting it from video if necessary."""
@@ -203,9 +176,6 @@ class SpeechToTextManager:
             recognized_texts=final_segments,
             processed_video=video_translation.processed_video,
         )
-
-    def _download_video(self, file: RemoteFile):
-        return self._file_repository.materialize_file(file)
 
     def _extract_audio(self, video_file_path, audio_file_name='extracted_audio.wav') -> RemoteFile:
         """

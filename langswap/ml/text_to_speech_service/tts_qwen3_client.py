@@ -6,7 +6,7 @@ import soundfile as sf
 from tqdm.auto import tqdm
 
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
-from langswap.model_downloader import ensure_qwen3_tts_model
+from langswap.model_config import resolve_model
 
 
 class Qwen3TTSClient:
@@ -24,8 +24,9 @@ class Qwen3TTSClient:
         dtype: str = "auto",
         attn_implementation: Optional[str] = "flash_attention_2",
     ):
-        # Auto-download model if not present
-        self.model_id = str(ensure_qwen3_tts_model(model_path))
+        # Auto-downloads from HF into models_weights on first use.
+        self.model_id = resolve_model(
+            "LANGSWAP_QWEN3_TTS_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-Base", model_path)
         self.device = device
         self.dtype = dtype
         self.attn_implementation = attn_implementation
@@ -75,6 +76,17 @@ class Qwen3TTSClient:
             ) from e
 
         try:
+            # transformers 5.x compat: qwen-tts imports `check_model_inputs`,
+            # which was removed in transformers 5.x. Re-add a no-op so the
+            # import succeeds regardless of which backend loaded first.
+            import transformers.utils.generic as _tug
+            if not hasattr(_tug, "check_model_inputs"):
+                def _check_model_inputs(*_a, **_k):
+                    def _decorator(fn):
+                        return fn
+                    return _decorator
+                _tug.check_model_inputs = _check_model_inputs
+
             from qwen_tts import Qwen3TTSModel
         except ModuleNotFoundError as e:
             raise ModuleNotFoundError(

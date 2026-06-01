@@ -1,233 +1,102 @@
-from importlib.util import source_hash
-import uuid
-from dotenv import load_dotenv
-import boto3
-import os
-import logging
+"""langswap command-line entrypoint.
 
-from langswap.translation_pipeline import VideoTranslationPipeline, ChangeManager
-from langswap.pipeline_models.models import TraslationUpdate
-from langswap.pipeline_models.models import TranslationPipelineConfig, load_config_from_json
-from langswap.file_repository import RemoteFile, RemoteFileRepository, download_s3_directory
+Two subcommands:
+
+    # Run the full pipeline on a LOCAL video file (no S3/AWS) — for dev/testing.
+    python main.py local in.mp4 english russian
+    python main.py local in.mp4 english --tts omnivoice --stop-after asr
+
+    # Run the S3/RunPod-style pipeline from a JSON job file (needs AWS creds).
+    python main.py runpod --input-file tests/fixtures/test_input.json
+
+The actual pipeline logic lives in ``langswap.api`` (the importable library used
+by ``serverless.py`` and the batch scripts); this file is only the CLI surface.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import logging
+import os
+import traceback
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 load_dotenv()
 
-# Set the global logging level to WARNING to hide INFO messages
-logging.disable(logging.DEBUG)
-
-BASE_DIR = "data"
-
-def init_s3_client():
-    s3 = boto3.client('s3',
-        endpoint_url            = 'https://storage.yandexcloud.net',
-        aws_access_key_id       = os.environ['AWS_ACCESS_KEY_ID'],
-        aws_secret_access_key   = os.environ['AWS_SECRET_ACCESS_KEY']
-    )
-    return s3
-
-def get_file(repo, s3_url):
-    remote_file = RemoteFile(
-            s3_url = s3_url,
-            name="source.mp4"
-    )
-    remote_file = repo.materialize_file(remote_file)
-    return remote_file.file_path
-
-def process_translation(input, progress_callback=None):
-    """
-    Core translation processing function that can be used both by RunPod handler
-    and local testing
-    
-    Args:
-        input: Dictionary with translation parameters
-        progress_callback: Optional function to report progress
-    """
-    # Helper function for progress updates
-    def update_progress(message):
-        if progress_callback:
-            progress_callback(message)
-        else:
-            print(message)
-
-    assert 'target_language' in input.keys(), "target language is missing from input"
-    assert 'tts_engine' in input.keys(), "tts engine is missing from input"
-    
-    # First progress update - Initialization
-    update_progress("0% Initializing translation pipeline")
-
-    s3_client = init_s3_client()
-
-    public_id = input.get('public_id', str(uuid.uuid4()))
-    repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
-    file_path = get_file(repo, input.get("s3_video_url"))
-    
-    tts_engine = input.get("tts_engine", "chatterbox")
-    if input.get('source_language') == "english" and input.get("target_language") == "russian" and input.get("tts_engine") == "xtts":
-        tts_engine = "f5tts"
-
-    config = TranslationPipelineConfig(
-        source_lang=input.get('source_language', None),
-        target_lang=input.get('target_language'),
-        name=public_id,
-        public_id=public_id,
-        num_speakers=input.get('count_speakers', None),
-        source_video_path=file_path,
-        base_dir=BASE_DIR,
-        device='cuda',
-        voice_conv=False,
-        tts_model=tts_engine,
-        dubbing_algo=input.get("dubbing_algo", "speedup"),
-        eleven_api_token=input.get("token", None),
-        watermark=input.get("watermark", True),
-        asr_backend=input.get("asr_backend", "qwen"),
-        translation_backend=input.get("translation_backend", "local"),
-    )
-    
-    pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
-    
-    # Second progress update - Transcription
-    update_progress("20% Starting transcription (Speech-to-Text)")
-    pipeline._generate_asr()
-    
-    # Third progress update - Translation
-    update_progress("40% Starting translation")
-    pipeline._generate_translation()
-    
-    # Fourth progress update - Text-to-Speech
-    update_progress("60% Starting Text-to-Speech synthesis")
-    pipeline._generate_speech()
-    
-    # Fifth progress update - Audio separation and merging
-    update_progress("80% Starting audio separation and enhancement")
-    video_translation = pipeline._merge(pipeline.config.dubbing_algo)
-    
-    # Generate SRT files - updated to use the method from the pipeline
-    update_progress("95% Generating subtitle files")
-    source_srt, translated_srt = pipeline.generate_srt_files()
-    
-    # Final progress update
-    update_progress("100% Translation pipeline completed successfully")
-    
-    result_video = video_translation.processed_video
-    
-    # Return URLs for both the video and the SRT files
-    return {
-        's3_result_video_url': f'{result_video.s3_url}',
-        's3_source_transcript_url': f'{source_srt.s3_url}',
-        's3_translated_transcript_url': f'{translated_srt.s3_url}'
-    }
-
-def process_update_translation(input, progress_callback=None):
-    """
-    Core translation processing function that can be used both by RunPod handler
-    and local testing
-    
-    Args:
-        input: Dictionary with translation parameters
-        progress_callback: Optional function to report progress
-    """
-    # Helper function for progress updates
-    def update_progress(message):
-        if progress_callback:
-            progress_callback(message)
-        else:
-            print(message)
-    
-    public_id = input.get('public_id')
-    s3_video_url = input.get("s3_video_url")
-    update_translation_collection = input.get("update_translation")
-    
-    # First progress update - Initialization
-    update_progress("0% Initializing translation pipeline")
-
-    s3_client = init_s3_client()
-    repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
-    get_file(repo, s3_video_url)
-    bucket = os.getenv('BUCKET')
-    download_s3_directory(s3_client, bucket, f"{BASE_DIR}/{public_id}", f"{BASE_DIR}/{public_id}")
-    config_file = repo.get_file("config.json")
-    config = load_config_from_json(config_file.file_path)
-    
-    pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
-    # Second progress update - Transcription
-    update_progress("30% Loading cache")
-    video_translation = pipeline.translate_video()
-
-  
-    update_progress("60% Initializing change manager")
-    change_menager = ChangeManager(pipeline, video_translation)
-    
-    video_translation = change_menager.apply_update_translations(TraslationUpdate.from_pairs(update_translation_collection))
-    update_progress("90% Apply changes")
-    update_progress("95% Generating subtitle files")
-    pipeline.video_translation = video_translation
-    source_srt, translated_srt = pipeline.generate_srt_files()
-    
-    result_video = video_translation.processed_video
-    
-    
-    # Return URLs for both the video and the SRT files
-    return {
-        's3_result_video_url': f'{result_video.s3_url}',
-        's3_source_transcript_url': f'{source_srt.s3_url}',
-        's3_translated_transcript_url': f'{translated_srt.s3_url}'
-    }
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("langswap.main")
 
 
-def test_video_translation_local(input_file="test_input.json"):
-    """
-    This function builds a sample event and calls the handler.
-    Adjust the values for testing based on your environment.
-    """
-    import json
-    with open(input_file, "r") as f:
-        test_event = json.load(f)
+def _id_for(video_path: str) -> str:
+    """Derive a stable ID from the input path so caches survive re-runs."""
+    return hashlib.md5(str(video_path).encode("utf-8")).hexdigest()[:12]
+
+
+def _pick_device(want: str) -> str:
+    want = (want or "auto").lower()
+    if want != "auto":
+        return want
     try:
-        result = process_translation(test_event['input'])
-        print("Translation Test Successful:")
-        print(result)
-        return result
-    except Exception as e:
-        print("Translation Test Failed:")
-        print(e)
-        raise
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
 
-def test_local_file(
-    local_video_path: str,
-    source_language: str = "russian",
-    target_language: str = "english",
-    tts_engine: str = "omnivoice",
-    device: str = "mps",
-    skip_diarization: bool = True,
-    asr_backend: str = "qwen",
-    translation_backend: str = "local",
-):
-    """
-    Run the full pipeline on a local video file without S3.
-    Useful for local dev/testing on Mac.
-    """
+
+def run_local(
+    video: str,
+    target_lang: str,
+    source_lang: str | None,
+    device: str,
+    tts_engine: str,
+    asr_backend: str,
+    translation_backend: str,
+    dubbing_algo: str,
+    skip_diarization: bool,
+    stop_after: str | None,
+) -> int:
+    """Run the pipeline against a local file, one stage at a time, with verbose
+    logging.  Intermediate JSON outputs are cached under ``data/<id>/`` so reruns
+    skip stages that already succeeded.  Returns a process exit code."""
     from langswap.file_repository import LocalOnlyFileRepository
-    from langswap.translation_pipeline import VideoTranslationPipeline
     from langswap.pipeline_models.models import TranslationPipelineConfig
+    from langswap.translation_pipeline import VideoTranslationPipeline
 
-    # Derive a stable ID from the input file so intermediate results are cached
-    # across re-runs (avoids re-running ASR/translation on every retry).
-    import hashlib
-    public_id = hashlib.md5(str(local_video_path).encode()).hexdigest()[:12]
-    repo = LocalOnlyFileRepository(public_id, BASE_DIR)
+    video_path = Path(video).expanduser().resolve()
+    if not video_path.exists():
+        log.error("Video not found: %s", video_path)
+        return 2
+
+    public_id = _id_for(str(video_path))
+    base_dir = os.environ.get("LANGSWAP_DATA_DIR", "data")
+    repo = LocalOnlyFileRepository(public_id, base_dir)
+
+    resolved_device = _pick_device(device)
+    log.info("video=%s id=%s device=%s data_dir=%s",
+             video_path, public_id, resolved_device, repo.directory)
 
     config = TranslationPipelineConfig(
-        source_lang=source_language,
-        target_lang=target_language,
+        source_lang=source_lang,
+        target_lang=target_lang,
         name=public_id,
         public_id=public_id,
         num_speakers=None,
-        source_video_path=local_video_path,
-        base_dir=BASE_DIR,
-        device=device,
+        source_video_path=str(video_path),
+        base_dir=base_dir,
+        device=resolved_device,
         voice_conv=False,
         tts_model=tts_engine,
-        dubbing_algo="speedup",
+        dubbing_algo=dubbing_algo,
         eleven_api_token=os.environ.get("ELEVEN_API_KEY"),
         watermark=False,
         skip_diarization=skip_diarization,
@@ -236,36 +105,95 @@ def test_local_file(
     )
 
     pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
+    stages = [
+        ("asr", pipeline._generate_asr),
+        ("translation", pipeline._generate_translation),
+        ("tts", pipeline._generate_speech),
+        ("merge", lambda: setattr(pipeline, "video_translation",
+                                  pipeline._merge(pipeline.config.dubbing_algo))),
+        ("srt", pipeline.generate_srt_files),
+    ]
 
-    print("20% Starting transcription (Speech-to-Text)")
-    pipeline._generate_asr()
-    print("40% Starting translation")
-    pipeline._generate_translation()
-    print("60% Starting Text-to-Speech synthesis")
-    pipeline._generate_speech()
-    print("80% Starting audio separation and enhancement")
-    video_translation = pipeline._merge(pipeline.config.dubbing_algo)
-    print("95% Generating subtitle files")
-    source_srt, translated_srt = pipeline.generate_srt_files()
-    print("100% Done")
-    print("Output:", video_translation.processed_video.file_path)
-    return video_translation
+    for name, fn in stages:
+        log.info("===== stage start: %s =====", name)
+        try:
+            fn()
+        except Exception:
+            log.exception("Stage %s failed", name)
+            return 1
+        log.info("===== stage done:  %s =====", name)
+        if stop_after == name:
+            log.info("Stopping after %s as requested.", name)
+            break
+
+    out = pipeline.video_translation.processed_video
+    if out and out.file_path:
+        log.info("OUTPUT VIDEO: %s", out.file_path)
+    log.info("OUTPUT DIR:   %s", repo.directory)
+    return 0
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="langswap", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # local --------------------------------------------------------------
+    p_local = sub.add_parser("local", help="Run the pipeline on a local video file (no S3).")
+    p_local.add_argument("video", help="Path to the source video.")
+    p_local.add_argument("target_lang", nargs="?", default="english")
+    p_local.add_argument("source_lang", nargs="?", default=None,
+                         help="optional; pipeline auto-detects if omitted")
+    p_local.add_argument("--device", default="auto", choices=["auto", "cuda", "mps", "cpu"])
+    p_local.add_argument("--tts", default="omnivoice")
+    p_local.add_argument("--asr", default="qwen")
+    p_local.add_argument("--translation", default="local")
+    p_local.add_argument("--dubbing", default="speedup",
+                         choices=["speedup", "stretch_whole", "pause_based"])
+    p_local.add_argument("--with-diarization", action="store_true",
+                         help="enable speaker diarization (off by default for speed)")
+    p_local.add_argument("--stop-after", default=None,
+                         choices=["asr", "translation", "tts", "merge", "srt"])
+
+    # runpod -------------------------------------------------------------
+    p_runpod = sub.add_parser("runpod", help="Run the S3/RunPod pipeline from a JSON job file.")
+    p_runpod.add_argument("--input-file", default="tests/fixtures/test_input.json",
+                          help="JSON file with a top-level 'input' key.")
+
+    return parser
+
+
+def main() -> int:
+    args = _build_parser().parse_args()
+
+    if args.command == "local":
+        try:
+            return run_local(
+                video=args.video,
+                target_lang=args.target_lang,
+                source_lang=args.source_lang,
+                device=args.device,
+                tts_engine=args.tts,
+                asr_backend=args.asr,
+                translation_backend=args.translation,
+                dubbing_algo=args.dubbing,
+                skip_diarization=not args.with_diarization,
+                stop_after=args.stop_after,
+            )
+        except Exception:
+            log.exception("Fatal error")
+            traceback.print_exc()
+            return 1
+
+    if args.command == "runpod":
+        from langswap.api import test_video_translation_local
+        test_video_translation_local(args.input_file)
+        return 0
+
+    return 2
 
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "local":
-        # Usage: python main.py local <video> [asr] [translation] [tts] [src_lang] [tgt_lang]
-        # Examples:
-        #   python main.py local video.mp4
-        #   python main.py local video.mp4 openai openai omnivoice english russian
-        video = sys.argv[2] if len(sys.argv) > 2 else "test_videos/tanks.mp4"
-        asr_b = sys.argv[3] if len(sys.argv) > 3 else "qwen"
-        tr_b  = sys.argv[4] if len(sys.argv) > 4 else "local"
-        tts_e = sys.argv[5] if len(sys.argv) > 5 else "omnivoice"
-        src_l = sys.argv[6] if len(sys.argv) > 6 else "russian"
-        tgt_l = sys.argv[7] if len(sys.argv) > 7 else "english"
-        test_local_file(video, source_language=src_l, target_language=tgt_l,
-                        asr_backend=asr_b, translation_backend=tr_b, tts_engine=tts_e)
-    else:
-        test_video_translation_local()
+    raise SystemExit(main())

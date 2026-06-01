@@ -10,6 +10,9 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+# F5-TTS depends on the optional `f5_tts` package; skip the whole module if absent.
+pytest.importorskip("f5_tts", reason="F5-TTS backend optional dependency 'f5_tts' not installed")
+
 from langswap.ml.text_to_speech_service.tts_f5_client import FlowClient
 
 

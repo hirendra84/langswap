@@ -11,12 +11,32 @@ import logging
 import os
 from typing import List, Optional
 
-from tqdm import tqdm
 
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
-from langswap.model_downloader import ensure_translategemma_gguf_model, ensure_translategemma_tokenizer
+from langswap.model_config import MODEL_WEIGHTS_DIR, resolve_model
 
 logger = logging.getLogger(__name__)
+
+_GGUF_REPO = "mradermacher/translategemma-4b-it-GGUF"
+_GGUF_FILE = "translategemma-4b-it.Q4_K_M.gguf"
+
+
+def _ensure_gguf(model_path: Optional[str]) -> str:
+    """Resolve the TranslateGemma GGUF weights path.
+
+    Uses an explicit path / ``LANGSWAP_TRANSLATEGEMMA_GGUF`` if present, else
+    downloads the single GGUF file into models_weights on first use.
+    """
+    explicit = model_path or os.environ.get("LANGSWAP_TRANSLATEGEMMA_GGUF")
+    if explicit and os.path.exists(explicit):
+        return explicit
+    from huggingface_hub import hf_hub_download
+    return hf_hub_download(
+        repo_id=_GGUF_REPO,
+        filename=_GGUF_FILE,
+        local_dir=os.path.join(MODEL_WEIGHTS_DIR, "translategemma-4b-it-GGUF"),
+        token=os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN"),
+    )
 
 
 class VLLMTranslationClient:
@@ -34,8 +54,9 @@ class VLLMTranslationClient:
         tokenizer_path: Optional[str] = None,
         device: str = "cuda",
     ):
-        self.model_path = str(ensure_translategemma_gguf_model(model_path))
-        self.tokenizer_path = str(ensure_translategemma_tokenizer(tokenizer_path))
+        self.model_path = _ensure_gguf(model_path)
+        self.tokenizer_path = resolve_model(
+            "LANGSWAP_TRANSLATEGEMMA_TOKENIZER", "google/translategemma-4b-it", tokenizer_path)
         self.device = device
         self._llm = None
         self._tokenizer = None

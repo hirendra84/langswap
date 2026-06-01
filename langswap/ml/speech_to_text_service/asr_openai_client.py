@@ -24,8 +24,8 @@ class OpenAIASRClient:
     transcribe() return type.
 
     Requires OPENAI_API_KEY env var.
-    Diarization requires pyannote model weights (same as other backends):
-        langswap-download-models --model pyannote-speaker-diarization
+    Diarization requires pyannote model weights (same as other backends); they
+    auto-download on first use when HF_TOKEN is set.
     Pass skip_diarization=True to skip speaker assignment (all words → SPEAKER_00).
     """
 
@@ -54,7 +54,7 @@ class OpenAIASRClient:
         if not skip_diarization and not os.path.exists(self.model_path_diarization):
             raise FileNotFoundError(
                 f"Diarization model not found at: {self.model_path_diarization}\n"
-                "Please set HF_TOKEN and run: langswap-download-models --model pyannote-speaker-diarization"
+                "Please set HF_TOKEN — the pyannote diarization model downloads automatically on first use."
             )
 
         self.load_models()

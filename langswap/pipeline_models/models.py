@@ -5,7 +5,7 @@ import json
 
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import List, Tuple, Union, Dict, Literal, Optional
+from typing import List, Tuple, Union, Literal, Optional
 
 
 @attr.s(auto_attribs=True)
@@ -59,7 +59,7 @@ class TranslationPipelineConfig:
     device: str = field(default="cuda")
     name: str = field(default="example")
     dubbing_algo: Literal["speedup", "pause_based", "stretch_whole"] = field(default="speedup")
-    tts_model: Literal["fish", "xtts", "f5tts", "elevenlabs", "qwen3", "omnivoice"] = field(default=None)
+    tts_model: Literal["xtts", "f5tts", "elevenlabs", "qwen3", "omnivoice", "chatterbox"] = field(default=None)
     eleven_api_token: str = field(default=None)
     watermark: bool = field(default=False)
     skip_diarization: bool = field(default=False)  # Skip speaker diarization (useful when pyannote models unavailable)

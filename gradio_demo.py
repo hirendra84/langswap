@@ -17,7 +17,6 @@ import argparse
 import hashlib
 import logging
 import os
-import shutil
 import traceback
 from pathlib import Path
 from typing import Optional
@@ -25,21 +24,12 @@ from typing import Optional
 import gradio as gr
 from dotenv import load_dotenv
 
-# Load .env (HF_TOKEN, ELEVEN_API_KEY, LANGSWAP_QWEN_ASR_URL, …) before anything
-# else reads the environment.
+# Load .env (HF_TOKEN, ELEVEN_API_KEY, …) before anything else reads the
+# environment.
 load_dotenv()
 
-# Default the ASR backend to the already-running Qwen ASR microservice instead
-# of loading a second in-process vLLM copy on the GPU.  The docker service maps
-# container :8000 -> host :8001 (see docker-compose.yml).  Overridable via env.
-os.environ.setdefault("LANGSWAP_QWEN_ASR_URL", "http://localhost:8001")
-
+from langswap import backends
 from langswap.file_repository import LocalOnlyFileRepository
-from langswap.model_downloader import (
-    download_all_models,
-    ensure_model,
-    list_available_models,
-)
 from langswap.pipeline_models.models import TranslationPipelineConfig
 from langswap.translation_pipeline import VideoTranslationPipeline
 
@@ -52,10 +42,11 @@ LANGUAGES = ["english", "russian", "spanish", "french", "german", "italian",
              "portuguese", "polish", "dutch", "turkish", "arabic", "hindi",
              "japanese", "korean", "chinese"]
 
-TTS_ENGINES = ["omnivoice", "xtts", "f5tts", "chatterbox", "qwen3", "elevenlabs"]
-ASR_BACKENDS = ["qwen", "qwen_remote", "whisperx", "openai"]
-TRANSLATION_BACKENDS = ["local", "vllm", "openai"]
-DUBBING_ALGOS = ["speedup", "stretch_whole", "pause_based"]
+# Backend choices come from langswap/backends.json (single source of truth).
+TTS_ENGINES = backends.options("tts")
+ASR_BACKENDS = backends.options("asr")
+TRANSLATION_BACKENDS = backends.options("translation")
+DUBBING_ALGOS = backends.options("dubbing")
 
 
 def _public_id(video_path: str) -> str:
@@ -165,26 +156,6 @@ def translate_video(
         return None, None, None, f"Pipeline failed: {e}\n\n{tb}"
 
 
-def _download_models_action(selected: list[str], skip_gated: bool) -> str:
-    """Gradio callback: pre-download model weights to the local cache."""
-    lines: list[str] = []
-    try:
-        if not selected:
-            results = download_all_models(skip_gated=skip_gated)
-            if not results:
-                return "No models downloaded (check HF_TOKEN for gated models, or network)."
-            lines.append(f"Downloaded {len(results)} models:")
-            for name, path in results.items():
-                lines.append(f"  {name} -> {path}")
-        else:
-            for name in selected:
-                path = ensure_model(name)
-                lines.append(f"{name} -> {path}")
-        return "\n".join(lines)
-    except Exception as e:  # noqa: BLE001
-        return f"Download failed: {e}\n\n{traceback.format_exc()}"
-
-
 def build_ui() -> gr.Blocks:
     with gr.Blocks(title="langswap — local video translation demo") as demo:
         gr.Markdown(
@@ -208,13 +179,13 @@ def build_ui() -> gr.Blocks:
                     )
 
                 with gr.Accordion("Models / backends", open=False):
-                    tts_engine = gr.Dropdown(TTS_ENGINES, value="omnivoice", label="TTS engine")
-                    asr_backend = gr.Dropdown(ASR_BACKENDS, value="qwen_remote", label="ASR backend")
+                    tts_engine = gr.Dropdown(TTS_ENGINES, value=backends.default("tts"), label="TTS engine")
+                    asr_backend = gr.Dropdown(ASR_BACKENDS, value=backends.default("asr"), label="ASR backend")
                     translation_backend = gr.Dropdown(
-                        TRANSLATION_BACKENDS, value="local", label="Translation backend"
+                        TRANSLATION_BACKENDS, value=backends.default("translation"), label="Translation backend"
                     )
                     dubbing_algo = gr.Dropdown(
-                        DUBBING_ALGOS, value="speedup", label="Dubbing algorithm"
+                        DUBBING_ALGOS, value=backends.default("dubbing"), label="Dubbing algorithm"
                     )
                     device = gr.Dropdown(
                         ["auto", "cuda", "mps", "cpu"], value="auto", label="Device"
@@ -247,31 +218,10 @@ def build_ui() -> gr.Blocks:
             outputs=[video_out, source_srt_out, target_srt_out, status_out],
         )
 
-        with gr.Accordion("Model downloads", open=False):
-            model_choices = [s.name for s in list_available_models()]
-            model_select = gr.CheckboxGroup(
-                model_choices,
-                value=[],
-                label="Models to download (empty = all)",
-            )
-            skip_gated_cb = gr.Checkbox(
-                value=True,
-                label="Skip gated models without HF_TOKEN",
-            )
-            dl_btn = gr.Button("Download selected", variant="secondary")
-            dl_status = gr.Textbox(label="Download status", lines=8)
-            dl_btn.click(
-                fn=_download_models_action,
-                inputs=[model_select, skip_gated_cb],
-                outputs=[dl_status],
-            )
-
         gr.Markdown(
             "### Tips\n"
-            "- First run downloads the model weights — this can take a long time and "
-            "needs free disk space under your cache directory.\n"
-            "- Pre-download everything with `langswap-download-models --all` or via "
-            "the *Model downloads* panel above.\n"
+            "- First run auto-downloads the model weights into `models_weights/` — "
+            "this can take a long time and needs free disk space.\n"
             "- Override model IDs via env vars: `LANGSWAP_QWEN_ASR_MODEL`, "
             "`LANGSWAP_TRANSLATEGEMMA_MODEL`, `LANGSWAP_OMNIVOICE_MODEL`.\n"
             "- Intermediate artifacts are cached under `data/<id>/` — re-running on "

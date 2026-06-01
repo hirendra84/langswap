@@ -1,0 +1,37 @@
+{
+  "asr": {
+    "default": "qwen",
+    "options": {
+      "qwen":     {"label": "Qwen3-ASR (local)",   "requires_gpu": true,  "requires_api_key": null},
+      "whisperx": {"label": "WhisperX (local)",     "requires_gpu": true,  "requires_api_key": null},
+      "openai":   {"label": "OpenAI Whisper (API)", "requires_gpu": false, "requires_api_key": "OPENAI_API_KEY"}
+    }
+  },
+  "translation": {
+    "default": "local",
+    "options": {
+      "local":  {"label": "TranslateGemma (local)", "requires_gpu": true,  "requires_api_key": null},
+      "vllm":   {"label": "TranslateGemma (vLLM)",  "requires_gpu": true,  "requires_api_key": null},
+      "openai": {"label": "OpenAI (API)",           "requires_gpu": false, "requires_api_key": "OPENAI_API_KEY"}
+    }
+  },
+  "tts": {
+    "default": "omnivoice",
+    "options": {
+      "omnivoice":  {"label": "OmniVoice (local)",   "requires_gpu": true,  "requires_api_key": null},
+      "xtts":       {"label": "XTTS-v2 (local)",     "requires_gpu": true,  "requires_api_key": null},
+      "f5tts":      {"label": "F5-TTS (local)",      "requires_gpu": true,  "requires_api_key": null},
+      "chatterbox": {"label": "Chatterbox (local)",  "requires_gpu": true,  "requires_api_key": null},
+      "qwen3":      {"label": "Qwen3-TTS (local)",   "requires_gpu": true,  "requires_api_key": null},
+      "elevenlabs": {"label": "ElevenLabs (API)",    "requires_gpu": false, "requires_api_key": "ELEVEN_API_KEY"}
+    }
+  },
+  "dubbing": {
+    "default": "speedup",
+    "options": {
+      "speedup":       {"label": "Speed up segments"},
+      "stretch_whole": {"label": "Stretch whole track"},
+      "pause_based":   {"label": "Pause-based fill"}
+    }
+  }
+}

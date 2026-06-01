@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 from abc import ABC
 from typing import List, Optional
 
 from tqdm import tqdm
 
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
-from langswap.model_downloader import ensure_translategemma_model
+from langswap.model_config import resolve_model
 
 
 _LANG_CODE_TO_NAME = {
@@ -58,7 +57,8 @@ class LLMTranslationClient(TranslatorClient):
         prompt_style: str = "auto",
     ):
         super().__init__(device)
-        self.model_path = str(ensure_translategemma_model(model_path))
+        self.model_path = resolve_model(
+            "LANGSWAP_TRANSLATEGEMMA_MODEL", "google/translategemma-4b-it", model_path)
         self.model = None
         self.tokenizer = None
         # For Gemma-4 (and other multimodal models) the chat template lives on
@@ -77,7 +77,7 @@ class LLMTranslationClient(TranslatorClient):
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_path,
-            local_files_only=True,  # Model already downloaded by ensure_translategemma_model
+            local_files_only=False,  # auto-download from HF into models_weights on first use
         )
 
         # Prefer the processor's chat template when it carries one (Gemma-4 keeps
@@ -121,7 +121,7 @@ class LLMTranslationClient(TranslatorClient):
             self.model_path,
             torch_dtype=torch_dtype,
             device_map=device_map,
-            local_files_only=True,  # Model already downloaded by ensure_translategemma_model
+            local_files_only=False,  # auto-download from HF into models_weights on first use
         )
 
         if getattr(self.tokenizer, "pad_token_id", None) is None and getattr(self.tokenizer, "eos_token_id", None) is not None:
