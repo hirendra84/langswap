@@ -173,6 +173,14 @@ class QwenASRX:
         return torch.float32, "cpu"
 
     def load_models(self):
+        # Idempotent.  This client is both constructed (──> __init__ calls
+        # load_models) AND used as a context manager (──> __enter__ calls it
+        # again) by the pipeline, so without this guard the ASR model loads
+        # TWICE — spinning up a second vLLM engine that collides with the first
+        # on GPU memory and aborts with "Free memory ... less than desired GPU
+        # memory utilization".  Load once; subsequent calls are no-ops.
+        if getattr(self, "asr_model", None) is not None:
+            return
         self._load_asr_model()
         if not self.skip_diarization:
             self._load_diarize_model()
@@ -201,6 +209,26 @@ class QwenASRX:
         try:
             import transformers.utils as _tu
             _tu.check_model_inputs = _check_model_inputs_compat
+        except Exception:
+            pass
+
+        # 1b. create_causal_mask - transformers 5.x renamed the input_embeds
+        # argument to inputs_embeds and dropped cache_position.  qwen-asr 0.0.6
+        # forced-aligner forward still calls it the old way, so wrap it to
+        # translate the kwarg and swallow the removed one.  Patched on the
+        # source module before qwen_asr imports the symbol from it.
+        try:
+            import transformers.masking_utils as _mu
+
+            _orig_create_causal_mask = _mu.create_causal_mask
+
+            def _create_causal_mask_compat(*args, **kwargs):
+                if "input_embeds" in kwargs and "inputs_embeds" not in kwargs:
+                    kwargs["inputs_embeds"] = kwargs.pop("input_embeds")
+                kwargs.pop("cache_position", None)  # removed in transformers 5.x
+                return _orig_create_causal_mask(*args, **kwargs)
+
+            _mu.create_causal_mask = _create_causal_mask_compat
         except Exception:
             pass
 
