@@ -8,7 +8,7 @@ from tqdm.auto import tqdm
 from coqui.TTS.api import TTS
 from langswap.file_repository import FileRepository
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
-from langswap.model_downloader import ensure_coqui_model
+from langswap.model_config import MODEL_WEIGHTS_DIR
 from .utils import add_pauses, merge_speaker_files
 
 
@@ -22,12 +22,13 @@ class XTTSClient:
         self.device = device
         self.sample_rate = 24000
 
-        # Auto-download XTTS model if not present
+        # XTTS-v2 is downloaded into models_weights by the Coqui TTS library on
+        # first use; point at that local layout (overridable via env / arg).
         if tts_model_path:
             self.tts_model_path = os.path.abspath(tts_model_path)
         else:
-            model_dir = ensure_coqui_model("coqui/XTTS-v2")
-            self.tts_model_path = str(model_dir / "multilingual" / "multi-dataset" / "xtts_v2")
+            self.tts_model_path = os.environ.get("LANGSWAP_XTTS_MODEL") or os.path.join(
+                MODEL_WEIGHTS_DIR, "tts_models", "multilingual", "multi-dataset", "xtts_v2")
 
         self.config_path = os.path.join(self.tts_model_path, "config.json")
 

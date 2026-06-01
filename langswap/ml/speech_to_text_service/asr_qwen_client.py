@@ -4,11 +4,7 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-from langswap.model_config import MODEL_WEIGHTS_DIR
-from langswap.model_downloader import (
-    ensure_qwen_aligner_model,
-    ensure_qwen_asr_model,
-)
+from langswap.model_config import MODEL_WEIGHTS_DIR, resolve_model
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 import attr
@@ -33,14 +29,6 @@ os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-
-
-def ensure_punctuation(text: str) -> str:
-    """Ensure text ends with sentence-ending punctuation for better forced alignment."""
-    text = text.strip()
-    if text and text[-1] not in ".!?,;:":
-        text += "."
-    return text
 
 
 @attr.s(auto_attribs=True)
@@ -141,19 +129,10 @@ class QwenASRX:
         # provided.  An explicit HF repo id (e.g. "Qwen/Qwen3-ASR-1.7B") is
         # respected and passed straight to the loader, which will fetch via
         # the standard HF cache.
-        if asr_model_id is None:
-            self.asr_model_id = str(ensure_qwen_asr_model())
-        elif os.path.isdir(asr_model_id):
-            self.asr_model_id = asr_model_id
-        else:
-            self.asr_model_id = asr_model_id
-
-        if aligner_model_id is None:
-            self.aligner_model_id = str(ensure_qwen_aligner_model())
-        elif os.path.isdir(aligner_model_id):
-            self.aligner_model_id = aligner_model_id
-        else:
-            self.aligner_model_id = aligner_model_id
+        self.asr_model_id = resolve_model(
+            "LANGSWAP_QWEN_ASR_MODEL", "Qwen/Qwen3-ASR-1.7B", asr_model_id)
+        self.aligner_model_id = resolve_model(
+            "LANGSWAP_QWEN_ALIGNER_MODEL", "Qwen/Qwen3-ForcedAligner-0.6B", aligner_model_id)
 
         if language is not None:
             self.language = map_language_to_code(language, system="whisper")
@@ -173,7 +152,7 @@ class QwenASRX:
         if not skip_diarization and not os.path.exists(self.model_path_diarization):
             raise FileNotFoundError(
                 f"Diarization model not found at: {self.model_path_diarization}\n"
-                "Please set HF_TOKEN and run: langswap-download-models --model pyannote-speaker-diarization"
+                "Please set HF_TOKEN — the pyannote diarization model downloads automatically on first use."
             )
 
         self.load_models()

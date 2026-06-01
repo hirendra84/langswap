@@ -89,17 +89,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         && rm -rf /var/lib/apt/lists/*
 RUN uv pip install -e . --no-deps --no-build-isolation --system
 
-# Weights are mounted at /models (see the `docker run` command above); nothing
-# is downloaded at build time.  HF_TOKEN at runtime lets any missing/gated model
-# fall back to a download into the mounted cache.
+# Models auto-download into MODEL_WEIGHTS_DIR (=/models) on first use; mount a
+# volume there (see the `docker run` command above) so weights persist across
+# runs — container- and runpod-friendly. model_config points the HF cache here
+# too. Set HF_TOKEN at runtime for gated models. Override any single model with
+# LANGSWAP_*_MODEL (a HF repo id or a local path) if you don't want auto-download.
 ENV MODEL_WEIGHTS_DIR=/models \
-    HF_HOME=/models/huggingface \
-    HUGGINGFACE_HUB_CACHE=/models/huggingface/hub \
-    TRANSFORMERS_CACHE=/models/huggingface/transformers \
-    LANGSWAP_DATA_DIR=/app/data \
-    LANGSWAP_TRANSLATEGEMMA_MODEL=/models/google__gemma-3-4b-it \
-    LANGSWAP_OMNIVOICE_MODEL=/models/k2-fsa__OmniVoice \
-    LANGSWAP_QWEN_ASR_MODEL=/models/Qwen__Qwen3-ASR-1.7B
+    LANGSWAP_DATA_DIR=/app/data
 
 EXPOSE 7860
 

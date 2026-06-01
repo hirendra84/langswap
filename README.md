@@ -51,7 +51,7 @@ docker run --rm --gpus all -p 7860:7860 \
 Open **http://localhost:7860**, drop in a video, pick a target language. Done.
 
 > **Needs:** an NVIDIA GPU + the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-> **First run:** download weights into `./models_weights` with `langswap-download-models --all` (set `HF_TOKEN` for gated models like Gemma). Missing models are fetched on demand if `HF_TOKEN` is set.
+> **First run:** models auto-download into `./models_weights` on first use (set `HF_TOKEN` for gated models like Gemma). Pre-place weights there to skip the download.
 
 ---
 
@@ -71,7 +71,7 @@ Everything runs in one process on transformers 5.x — ASR included.
 
 ## 📚 Documentation
 
-**[docs/ADVANCED.md](docs/ADVANCED.md)** — model registry, exact pinned install, every env var, the optional multi-container (Compose) stack, and troubleshooting.
+**[docs/ADVANCED.md](docs/ADVANCED.md)** — model list & overrides, exact pinned install, every env var, Docker build notes, and troubleshooting.
 
 ---
 

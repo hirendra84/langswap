@@ -30,10 +30,6 @@ demo = [
     "gradio>=4.0.0",
 ]
 
-[project.scripts]
-langswap = "langswap.cli:main"
-langswap-test = "langswap.cli:test_translation"
-langswap-download-models = "langswap.model_downloader:main"
 
 [tool.setuptools.dynamic]
 version = {file = "langswap/__VERSION__"}

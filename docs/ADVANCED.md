@@ -75,35 +75,27 @@ uv pip freeze | grep -vE '^-e |^langswap==| @ file://' >> requirements.lock.txt 
 
 ---
 
-## 3. Download model weights
+## 3. Model weights
 
-Weights are fetched with the bundled CLI into `MODEL_WEIGHTS_DIR` (default `./models_weights`).
+Models are loaded directly from HuggingFace and **auto-downloaded on first use** into the
+project's `models_weights/` directory (i.e. `MODEL_WEIGHTS_DIR`, which defaults to
+`./models_weights`). Keeping weights in the project tree is what makes the container and runpod
+builds self-contained. Set `HF_TOKEN` for the gated models.
 
-```bash
-# list everything in the registry
-langswap-download-models --list
+| Model            | Default repo                        | Gated   | Used by             |
+|------------------|-------------------------------------|---------|---------------------|
+| Qwen3-ASR        | `Qwen/Qwen3-ASR-1.7B`               | No      | ASR (default)       |
+| Qwen3 aligner    | `Qwen/Qwen3-ForcedAligner-0.6B`     | No      | ASR (default)       |
+| TranslateGemma   | `google/translategemma-4b-it`       | **Yes** | Translation         |
+| OmniVoice        | `k2-fsa/OmniVoice`                  | No      | TTS (default)       |
+| Qwen3-TTS        | `Qwen/Qwen3-TTS-12Hz-0.6B-Base`     | No      | TTS (`qwen3`)       |
+| XTTS-v2          | `coqui/XTTS-v2`                     | No      | TTS (`xtts`)        |
+| faster-whisper   | `large-v3`                          | No      | ASR (`whisperx`)    |
+| pyannote         | `pyannote/speaker-diarization-3.1`  | **Yes** | Diarization (opt.)  |
 
-# download all models (HF_TOKEN must be set for the gated ones)
-langswap-download-models --all
-
-# or download individually
-langswap-download-models --model qwen3-asr
-langswap-download-models --model qwen3-asr-aligner
-langswap-download-models --model gemma-translate     # gated -> needs HF_TOKEN
-langswap-download-models --model omnivoice
-```
-
-| Registry name                   | Repo                              | Gated | Used by              |
-|----------------------------------|-----------------------------------|-------|----------------------|
-| `qwen3-asr`                      | `Qwen/Qwen3-ASR-1.7B`             | No    | ASR                  |
-| `qwen3-asr-aligner`              | `Qwen/Qwen3-ForcedAligner-0.6B`   | No    | ASR                  |
-| `gemma-translate`                | `google/gemma-3-4b-it`            | **Yes** | Translation        |
-| `omnivoice`                      | `k2-fsa/OmniVoice`                | No    | TTS                  |
-| `pyannote-speaker-diarization`   | `pyannote/speaker-diarization-3.1`| **Yes** | Diarization (opt.) |
-| `pyannote-segmentation`          | `pyannote/segmentation-3.0`       | **Yes** | Diarization (opt.) |
-
-Override any repo id at runtime without editing code:
-`LANGSWAP_QWEN_ASR_MODEL`, `LANGSWAP_TRANSLATEGEMMA_MODEL`, `LANGSWAP_OMNIVOICE_MODEL`.
+Override any model without editing code via env var (a HF repo id **or** a local path):
+`LANGSWAP_QWEN_ASR_MODEL`, `LANGSWAP_QWEN_ALIGNER_MODEL`, `LANGSWAP_TRANSLATEGEMMA_MODEL`,
+`LANGSWAP_OMNIVOICE_MODEL`, `LANGSWAP_QWEN3_TTS_MODEL`, `LANGSWAP_WHISPERX_MODEL`.
 
 ---
 
@@ -203,7 +195,7 @@ process — no separate service.
 - `Dockerfile` / `overrides.txt` — all-in-one image (full pipeline + Gradio UI on transformers 5.9 / vllm 0.21)
 - `langswap/translation_pipeline.py` — pipeline orchestration
 - `langswap/ml/` — ASR / translation / TTS / dubbing implementations
-- `langswap/model_downloader.py` — model registry + `langswap-download-models` CLI
+- `langswap/model_config.py` — model weights/cache dir setup + `resolve_model` (HF id / local path resolution)
 
 ---
 

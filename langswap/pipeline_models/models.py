@@ -5,7 +5,7 @@ import json
 
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import List, Tuple, Union, Dict, Literal, Optional
+from typing import List, Tuple, Union, Literal, Optional
 
 
 @attr.s(auto_attribs=True)

@@ -4,7 +4,7 @@ import torchaudio
 
 from langswap.pipeline_models.models import RemoteFile
 from langswap.pipeline_models.models import VideoTranslation
-from langswap.pipeline_models.models import TranslationPipelineConfig, save_config_to_json, load_config_from_json
+from langswap.pipeline_models.models import TranslationPipelineConfig, save_config_to_json
 from langswap.pipeline_models.models import TraslationUpdate
 from langswap.ml.speech_to_text_service import SpeechToTextManager
 from langswap.ml.text_to_speech_service import TextToSpeechManager

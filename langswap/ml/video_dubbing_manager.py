@@ -4,9 +4,6 @@ import torch
 import numpy as np
 from langswap.file_repository import FileRepository
 from pyrubberband.pyrb import time_stretch
-import pandas as pd
-import numpy as np
-import torchaudio.transforms as T
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
 

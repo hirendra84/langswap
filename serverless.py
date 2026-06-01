@@ -1,7 +1,6 @@
-import sys
 import subprocess
 import runpod
-from main import process_translation, test_video_translation_local, process_update_translation
+from main import process_translation, process_update_translation
 
 # Set GPU compute mode at startup
 try:

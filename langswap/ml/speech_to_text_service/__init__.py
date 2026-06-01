@@ -8,7 +8,6 @@ from langswap.file_repository import FileRepository
 from langswap.pipeline_models.models import RemoteFile
 from langswap.pipeline_models.models import TextedSegment, VideoTranslation
 from langswap.ml.speech_to_text_service.asr_qwen_client import QwenASRX
-from langswap.ml.speech_to_text_service.vad_client import VadClient
 
 logger = getLogger(__name__)
 
@@ -51,25 +50,6 @@ class SpeechToTextManager:
         self.logger = logger
 
         self.audio_extensions = ["mp3", "wav", "MP3"]
-
-    def _resample_audio(self, audio_file: RemoteFile) -> RemoteFile:
-        """
-        Resamples the input audio file and applies Voice Activity Detection (VAD).
-
-        Ensures audio is at the target sample rate and filters non-speech segments.
-        """
-        resampled_audio_file = self._file_repository.get_file(f'{audio_file.name}_resampled_{self.sample_rate}')
-        (FFmpegClient()
-         .resample_audio(audio_file.file_path,
-                         resampled_audio_file.file_path,
-                         sample_rate=self.sample_rate))
-        vad_filtered_audio_file = self._file_repository.get_file(f'{resampled_audio_file.name}_vad')
-
-        vad_filtered_audio_file.file_path = VadClient().vad_filter(
-            resampled_audio_file.file_path,
-            vad_filtered_audio_file.file_path,
-            self.sample_rate)
-        return vad_filtered_audio_file
 
     def _get_audio_file(self, video_translation: VideoTranslation) -> str:
         """Gets the audio file path, extracting it from video if necessary."""
@@ -196,9 +176,6 @@ class SpeechToTextManager:
             recognized_texts=final_segments,
             processed_video=video_translation.processed_video,
         )
-
-    def _download_video(self, file: RemoteFile):
-        return self._file_repository.materialize_file(file)
 
     def _extract_audio(self, video_file_path, audio_file_name='extracted_audio.wav') -> RemoteFile:
         """

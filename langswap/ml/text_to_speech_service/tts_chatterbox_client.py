@@ -1,5 +1,4 @@
 import os
-import sys
 
 from tqdm.auto import tqdm
 
@@ -88,7 +87,6 @@ class ChatterboxClient:
 if __name__ == "__main__":
     # Minimal smoke test for generate_audio using a dummy model to avoid heavy downloads.
     import os
-    import torch
     from datetime import datetime
 
 

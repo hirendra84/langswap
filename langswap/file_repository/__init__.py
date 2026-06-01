@@ -7,7 +7,6 @@ import boto3
 import requests
 import os.path
 import urllib.request
-import requests
 from langswap.pipeline_models.models import RemoteFile
 from typing import List
 import os

@@ -7,7 +7,7 @@ import numpy as np
 import soundfile as sf
 from tqdm.auto import tqdm
 
-from langswap.model_downloader import ensure_omnivoice_model
+from langswap.model_config import resolve_model
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 
@@ -30,7 +30,7 @@ class OmniVoiceClient:
         stage_init_timeout: Optional[int] = None,
         log_stats: Optional[bool] = None,
     ):
-        self.model_id = str(ensure_omnivoice_model(model_path))
+        self.model_id = resolve_model("LANGSWAP_OMNIVOICE_MODEL", "k2-fsa/OmniVoice", model_path)
         self.device = device
         self.sample_rate = 24000
         self.stage_config_path = self._resolve_stage_config_path(stage_config_path)
