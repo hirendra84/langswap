@@ -1,3 +1,9 @@
+# GPU/Docker build input — intentionally UNPINNED; the validated transformers/vllm
+# pins are forced at install time via overrides.txt (see Dockerfile).  For an exact
+# reproducible env use requirements.lock.txt; for a normal install prefer the
+# pyproject extras:  pip install -e ".[api]"  (Mac/API)  or  ".[gpu]"  (full GPU).
+# See docs/advanced.md §2.
+
 # Core ML
 torch
 torchaudio

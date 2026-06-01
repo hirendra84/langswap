@@ -54,13 +54,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--config",
-        default="test_input.json",
-        help="Path to JSON config with top-level key 'input' (default: test_input.json).",
+        default=str(Path(__file__).resolve().parents[1] / "tests/fixtures/test_input.json"),
+        help="Path to JSON config with top-level key 'input' (default: tests/fixtures/test_input.json).",
     )
     parser.add_argument(
         "--links",
-        default="links_to_test_videos.txt",
-        help="Text file with one video URL per line (default: links_to_test_videos.txt).",
+        default=str(Path(__file__).resolve().parent / "links_to_test_videos.txt"),
+        help="Text file with one video URL per line (default: scripts/links_to_test_videos.txt).",
     )
     parser.add_argument(
         "--bucket",

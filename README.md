@@ -59,19 +59,23 @@ Open **http://localhost:7860**, drop in a video, pick a target language. Done.
 
 ```bash
 uv venv --python 3.12 && source .venv/bin/activate
-uv pip install -e ".[demo]"
+
+uv pip install -e ".[gpu]"     # full local-model stack (needs an NVIDIA GPU)
+# or, on a Mac / no GPU — relies on hosted APIs, far fewer deps:
+uv pip install -e ".[api]"
 
 python gradio_demo.py                          # browser UI  → http://localhost:7860
-python debug_local.py in.mp4 english russian   # CLI, stage-by-stage
+python main.py local in.mp4 english russian    # CLI, stage-by-stage
 ```
 
-Everything runs in one process on transformers 5.x — ASR included.
+The full GPU install runs everything in one process on transformers 5.x — ASR included.
+See [docs/advanced.md](docs/advanced.md) for the exact GPU install (torch cu130 + `qwen-asr`/`qwen-tts`).
 
 ---
 
 ## 📚 Documentation
 
-**[docs/ADVANCED.md](docs/ADVANCED.md)** — model list & overrides, exact pinned install, every env var, Docker build notes, and troubleshooting.
+**[docs/advanced.md](docs/advanced.md)** — model list & overrides, exact pinned install, every env var, Docker build notes, and troubleshooting.
 
 ---
 

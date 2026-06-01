@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 # environment.
 load_dotenv()
 
+from langswap import backends
 from langswap.file_repository import LocalOnlyFileRepository
 from langswap.pipeline_models.models import TranslationPipelineConfig
 from langswap.translation_pipeline import VideoTranslationPipeline
@@ -41,10 +42,11 @@ LANGUAGES = ["english", "russian", "spanish", "french", "german", "italian",
              "portuguese", "polish", "dutch", "turkish", "arabic", "hindi",
              "japanese", "korean", "chinese"]
 
-TTS_ENGINES = ["omnivoice", "xtts", "f5tts", "chatterbox", "qwen3", "elevenlabs"]
-ASR_BACKENDS = ["qwen", "whisperx", "openai"]
-TRANSLATION_BACKENDS = ["local", "vllm", "openai"]
-DUBBING_ALGOS = ["speedup", "stretch_whole", "pause_based"]
+# Backend choices come from langswap/backends.json (single source of truth).
+TTS_ENGINES = backends.options("tts")
+ASR_BACKENDS = backends.options("asr")
+TRANSLATION_BACKENDS = backends.options("translation")
+DUBBING_ALGOS = backends.options("dubbing")
 
 
 def _public_id(video_path: str) -> str:
@@ -177,13 +179,13 @@ def build_ui() -> gr.Blocks:
                     )
 
                 with gr.Accordion("Models / backends", open=False):
-                    tts_engine = gr.Dropdown(TTS_ENGINES, value="omnivoice", label="TTS engine")
-                    asr_backend = gr.Dropdown(ASR_BACKENDS, value="qwen", label="ASR backend")
+                    tts_engine = gr.Dropdown(TTS_ENGINES, value=backends.default("tts"), label="TTS engine")
+                    asr_backend = gr.Dropdown(ASR_BACKENDS, value=backends.default("asr"), label="ASR backend")
                     translation_backend = gr.Dropdown(
-                        TRANSLATION_BACKENDS, value="local", label="Translation backend"
+                        TRANSLATION_BACKENDS, value=backends.default("translation"), label="Translation backend"
                     )
                     dubbing_algo = gr.Dropdown(
-                        DUBBING_ALGOS, value="speedup", label="Dubbing algorithm"
+                        DUBBING_ALGOS, value=backends.default("dubbing"), label="Dubbing algorithm"
                     )
                     device = gr.Dropdown(
                         ["auto", "cuda", "mps", "cpu"], value="auto", label="Device"

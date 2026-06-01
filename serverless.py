@@ -1,6 +1,6 @@
 import subprocess
 import runpod
-from main import process_translation, process_update_translation
+from langswap.api import process_translation, process_update_translation
 
 # Set GPU compute mode at startup
 try:

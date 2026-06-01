@@ -7,27 +7,76 @@ name = "langswap"
 dynamic = ["version"]
 description = "Video translation pipeline with speech-to-text, translation, and text-to-speech"
 readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
+requires-python = ">=3.10"
+license = {text = "AGPL-3.0-or-later"}
 authors = [
     {name = "Ilya Shigabeev", email = "ilya@langswap.app"}
 ]
+
+# Lightweight core, shared by every install variant (no torch / no GPU stack).
 dependencies = [
     "boto3",
     "python-dotenv",
+    "requests",
     "huggingface_hub>=0.20.0",
-    # Add other dependencies from requirements.txt
-    "elevenlabs>=2.36.1",
+    "attrs",
+    "cattrs",
+    "pydantic",
+    "numpy",
+    "pandas",
+    "tqdm",
+    "soundfile",
+    "pydub",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest",
-    "black",
-    "flake8",
+# Mac / CPU / API-only install — relies on hosted APIs (OpenAI ASR + translation,
+# ElevenLabs TTS) instead of the heavy local-model stack.  torch comes from PyPI
+# (CPU/MPS build).  Install:  pip install -e ".[api]"
+api = [
+    "torch",
+    "torchaudio",
+    "demucs @ git+https://github.com/shigabeev/demucs@9e454051dc5ed957b13525eaad82a2e74e8e5dcb",
+    "pyrubberband",
+    "silero-vad",
+    "openai",
+    "elevenlabs>=2.36.1",
+    "gradio>=4.0.0",
 ]
+
+# Full GPU install with local models (ASR/translation/TTS run on-device).
+# torch MUST be installed first from the CUDA index (see docs/advanced.md §2):
+#   pip install "torch==2.11.0" "torchaudio==2.11.0" --index-url https://download.pytorch.org/whl/cu130
+# and qwen-asr / qwen-tts added afterwards with --no-deps (they hard-pin an older
+# transformers but run on 5.x via the in-process compat shims):
+#   pip install qwen-asr qwen-tts --no-deps
+# transformers/vllm are pinned to the validated pair (matches overrides.txt + the lock).
+gpu = [
+    "transformers==5.9.0",
+    "vllm==0.21.0",
+    "vllm-omni",
+    "accelerate",
+    "safetensors>=0.4.3",
+    "tokenizers>=0.22.0,<=0.23.0",
+    "sentencepiece",
+    "protobuf",
+    "whisperx",
+    "torchcodec",
+    "demucs @ git+https://github.com/shigabeev/demucs@9e454051dc5ed957b13525eaad82a2e74e8e5dcb",
+    "pyrubberband",
+    "silero-vad",
+    "openai",
+    "elevenlabs>=2.36.1",
+    "gradio>=4.0.0",
+]
+
 demo = [
     "gradio>=4.0.0",
+]
+
+dev = [
+    "pytest",
+    "ruff",
 ]
 
 
@@ -36,8 +85,8 @@ version = {file = "langswap/__VERSION__"}
 
 [tool.setuptools.packages.find]
 include = ["langswap*"]
-exclude = ["tests*", "notebooks*"] 
-#, "F5-TTS*", "coqui*", "resemble*"]
+exclude = ["tests*", "scripts*", "notebooks*"]
 
 [tool.setuptools.package-data]
+"langswap" = ["backends.json"]
 "langswap.ml.text_to_speech_service" = ["configs/*.yaml"]

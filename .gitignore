@@ -184,7 +184,6 @@ tests/logs/
 
 .DS_Store
 experiments/
-langswap/model_downloader.py
 paper/
 sbs_results/
 test_local.py

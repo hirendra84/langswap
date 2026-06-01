@@ -79,7 +79,7 @@ RUN for i in 1 2 3 4 5; do \
 RUN uv pip install qwen-asr qwen-tts --no-deps --system
 
 COPY langswap/ ./langswap/
-COPY gradio_demo.py debug_local.py main.py ./
+COPY gradio_demo.py main.py serverless.py ./
 COPY langswap/__VERSION__ ./langswap/__VERSION__
 # The editable build needs setuptools+wheel as its build backend.  Install them
 # from apt (no pypi — the network is flaky here) in a layer AFTER the heavy deps

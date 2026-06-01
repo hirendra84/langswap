@@ -61,8 +61,8 @@ def process_translation(input, progress_callback=None):
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
     file_path = get_file(repo, input.get("s3_video_url"))
     
-    tts_engine = input.get("tts_engine", "xtts")
-    if input.get('source_language') == "english" and input.get("target_language") == "russian":
+    tts_engine = input.get("tts_engine", "chatterbox")
+    if input.get('source_language') == "english" and input.get("target_language") == "russian" and input.get("tts_engine") == "xtts":
         tts_engine = "f5tts"
 
     config = TranslationPipelineConfig(
@@ -77,7 +77,7 @@ def process_translation(input, progress_callback=None):
         voice_conv=False,
         tts_model=tts_engine,
         dubbing_algo=input.get("dubbing_algo", "speedup"),
-        eleven_api_token=input.get("token") or os.environ.get("ELEVEN_API_KEY"),
+        eleven_api_token=input.get("token"),
         watermark=input.get("watermark", True),
         skip_diarization=input.get("skip_diarization", False),
         asr_backend=input.get("asr_backend", "qwen"),
@@ -175,7 +175,7 @@ def process_update_translation(input, progress_callback=None):
     }
 
 
-def test_video_translation_local(input_file="test_input.json"):
+def test_video_translation_local(input_file="tests/fixtures/test_input.json"):
     """
     This function builds a sample event and calls the handler.
     Adjust the values for testing based on your environment.

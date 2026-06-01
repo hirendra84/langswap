@@ -39,8 +39,13 @@ LANGSWAP_DATA_DIR=./data               # where outputs/artifacts go
 ```bash
 uv venv --python 3.12
 source .venv/bin/activate
-uv pip install -e ".[demo]"      # ".[demo]" adds gradio; drop it for headless use
+uv pip install -e ".[gpu]"       # full local-model stack (NVIDIA GPU)
+# or, Mac / no GPU — hosted APIs, far fewer deps:
+uv pip install -e ".[api]"
 ```
+
+The `[gpu]` extra deliberately leaves torch and `qwen-asr`/`qwen-tts` out (torch needs the
+CUDA index, the qwen packages need `--no-deps`) — install those in the two extra steps below.
 
 > **Important — torch/vLLM ABI:** `vllm==0.21.0` (used by ASR and OmniVoice TTS) is built
 > against `torch==2.11.0`. `requirements.txt` is unpinned, so if a fresh resolve pulls
@@ -49,6 +54,13 @@ uv pip install -e ".[demo]"      # ".[demo]" adds gradio; drop it for headless u
 > uv pip install "torch==2.11.0" "torchaudio==2.11.0" "torchvision==0.26.0" \
 >   --index-url https://download.pytorch.org/whl/cu130
 > ```
+
+Then add the in-process Qwen3 ASR/TTS backends (they hard-pin an older transformers but run
+on 5.x via the compat shims, so install without their deps):
+
+```bash
+uv pip install qwen-asr qwen-tts --no-deps
+```
 
 ### Reproducible install (exact, pinned)
 
@@ -99,16 +111,16 @@ Override any model without editing code via env var (a HF repo id **or** a local
 
 ---
 
-## 4. Run locally for debugging (`debug_local.py`)
+## 4. Run locally for debugging (`main.py local`)
 
 Runs each pipeline stage separately with verbose logging and caches intermediate JSON under
 `data/<id>/`, so reruns skip stages that already succeeded.
 
 ```bash
-.venv/bin/python debug_local.py 12.mp4 english russian 2>&1 | tee /tmp/langswap_debug.log
+.venv/bin/python main.py local 12.mp4 english russian 2>&1 | tee /tmp/langswap_debug.log
 ```
 
-Positional args: `<video> [target_lang] [source_lang]` (source is auto-detected if omitted).
+Positional args: `local <video> [target_lang] [source_lang]` (source is auto-detected if omitted).
 
 Useful flags:
 
@@ -190,12 +202,15 @@ process — no separate service.
 
 ## Project structure
 
-- `debug_local.py` — local stage-by-stage CLI runner
+- `main.py` — CLI entrypoint (`local` stage-by-stage runner + `runpod` S3 job runner)
+- `serverless.py` — RunPod serverless handler
 - `gradio_demo.py` — local browser UI
 - `Dockerfile` / `overrides.txt` — all-in-one image (full pipeline + Gradio UI on transformers 5.9 / vllm 0.21)
 - `langswap/translation_pipeline.py` — pipeline orchestration
-- `langswap/ml/` — ASR / translation / TTS / dubbing implementations
+- `langswap/ml/` — ASR / translation / TTS / dubbing implementations (one client `.py` per backend)
+- `langswap/backends.json` — selectable ASR / translation / TTS / dubbing backends (UI reads this)
 - `langswap/model_config.py` — model weights/cache dir setup + `resolve_model` (HF id / local path resolution)
+- `scripts/` — dev/ops helpers (batch translate, quick check, RunPod integration, Docker build)
 
 ---
 

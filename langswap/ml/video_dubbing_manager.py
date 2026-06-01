@@ -239,7 +239,7 @@ class VideoDubbingManager:
         self.logger.log_json(data=df.to_dict('records'), file_name="pauses_for_stretch_whole.json")
         return audio_generated, sr_generated
     
-    def merge_timesteps_pause_based(self, video_translation, vocals_audio):
+    def merge_timestamps_pause_based(self, video_translation, vocals_audio):
         """
         Algorithm that works on filling the pauses - not the best one.
         """
