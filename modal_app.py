@@ -29,7 +29,11 @@ app = modal.App("langswap-dub")
 # The Dockerfile bakes PIP_BREAK_SYSTEM_PACKAGES=1 into its ENV, so Modal's
 # client-install step (which runs directly on this image) can pip-install into
 # Ubuntu 24.04's PEP-668 "externally managed" system Python.
-image = modal.Image.from_dockerfile("Dockerfile").env({"MODEL_WEIGHTS_DIR": "/models"})
+image = modal.Image.from_dockerfile("Dockerfile").env({
+    "MODEL_WEIGHTS_DIR": "/models",
+    # Reuse loaded models across jobs in a warm container (load once, not per job).
+    "LANGSWAP_WARM_REUSE": "1",
+})
 
 # Persistent weights cache: HF/torch downloads land here on first use and stick.
 weights = modal.Volume.from_name("langswap-weights", create_if_missing=True)
@@ -86,6 +90,24 @@ class Dubber:
         weights.commit()
         return result
 
+    @modal.method()
+    def dub_twice(self, job_input: dict) -> dict:
+        """Run two jobs in ONE container to measure warm-reuse (job2) vs cold
+        (job1) and surface any VRAM OOM from co-resident models."""
+        import time
+        from langswap.api import process_translation
+
+        t = time.perf_counter()
+        process_translation(job_input)
+        job1 = time.perf_counter() - t
+        t = time.perf_counter()
+        process_translation(job_input)
+        job2 = time.perf_counter() - t
+        weights.commit()
+        out = {"job1_s": round(job1, 1), "job2_s": round(job2, 1)}
+        print(f"[warm-reuse] {out}", flush=True)
+        return out
+
 
 # A dub takes minutes, far longer than an HTTP request should stay open, so the
 # endpoint is async: POST /run submits and returns a call_id immediately; the
@@ -119,3 +141,13 @@ def main(input_json: str = "/tmp/job.json"):
     job = json.load(open(input_json))
     result = Dubber().dub.remote(job.get("input", job))
     print("RESULT:", json.dumps(result, ensure_ascii=False))
+
+
+@app.local_entrypoint()
+def bench_warm(input_json: str = "/tmp/job_onnx.json"):
+    """Measure warm-reuse: two jobs in one container (job1 cold, job2 warm)."""
+    import json
+
+    job = json.load(open(input_json))
+    result = Dubber().dub_twice.remote(job.get("input", job))
+    print("WARM_RESULT:", json.dumps(result, ensure_ascii=False))

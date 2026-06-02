@@ -30,8 +30,11 @@ class TranslationManager:
             from langswap.ml.translation_service.translator_vllm_client import VLLMTranslationClient
             self._translator_client = VLLMTranslationClient(device=self.device)
         else:
+            from langswap.model_pool import get_or_create
             model_path = os.getenv("LANGSWAP_TRANSLATEGEMMA_MODEL")
-            self._translator_client = LLMTranslationClient(self.device, model_path=model_path)
+            self._translator_client = get_or_create(
+                ("translate", "local", self.device, model_path),
+                lambda: LLMTranslationClient(self.device, model_path=model_path))
 
     def translate(self, video_translation: VideoTranslation, source_lang: str, target_lang: str) -> VideoTranslation:
         segments = video_translation.recognized_texts

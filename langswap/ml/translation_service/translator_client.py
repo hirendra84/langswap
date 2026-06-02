@@ -72,6 +72,10 @@ class LLMTranslationClient(TranslatorClient):
         return "translategemma" if "translategemma" in self.model_path.lower() else "instruction"
 
     def load_models(self):
+        # Idempotent: when this client is reused across jobs (warm pool) the
+        # manager calls load_models() again — don't reload the weights.
+        if self.model is not None and self.tokenizer is not None:
+            return
         import torch
         from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 

@@ -162,6 +162,11 @@ class QwenASRX:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        # When the client is reused across jobs (warm pool) keep the loaded
+        # engine resident; otherwise free it so the next stage has VRAM.
+        from langswap.model_pool import warm_reuse_enabled
+        if warm_reuse_enabled():
+            return False
         self.asr_model = None
         self.diarize_model = None
 
