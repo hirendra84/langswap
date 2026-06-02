@@ -45,7 +45,7 @@ RUN uv pip install -r requirements.txt --override overrides.txt --system && \
                        --override overrides.txt --system
 
 RUN uv pip install qwen-asr qwen-tts --no-deps --system && \
-    uv pip install nagisa soynlp librosa qwen-omni-utils runpod \
+    uv pip install nagisa soynlp librosa qwen-omni-utils runpod sherpa-onnx \
         --override overrides.txt --system
 
 COPY langswap/ ./langswap/

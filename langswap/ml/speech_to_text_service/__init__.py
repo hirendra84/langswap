@@ -40,6 +40,11 @@ class SpeechToTextManager:
         # asr_qwen_client.py).  "openai" and "whisperx" are alternative backends.
         if backend == "qwen":
             self._asr_client = QwenASRX(device=device, language=language, skip_diarization=skip_diarization)
+        elif backend == "qwen_onnx":
+            # sherpa-onnx Qwen3-ASR-0.6B-int8 (transcription) + Qwen3ForcedAligner
+            # (word timestamps). ~10x faster cold than the vLLM 1.7B engine.
+            from langswap.ml.speech_to_text_service.asr_qwen_onnx_client import QwenASROnnx
+            self._asr_client = QwenASROnnx(device=device, language=language, skip_diarization=skip_diarization)
         elif backend == "openai":
             from langswap.ml.speech_to_text_service.asr_openai_client import OpenAIASRClient
             self._asr_client = OpenAIASRClient(device=device, language=language, skip_diarization=skip_diarization)
