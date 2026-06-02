@@ -154,8 +154,28 @@ class LLMTranslationClient(TranslatorClient):
         source_code = _to_lang_code(source_language)
         target_code = _to_lang_code(target_language)
 
+        # Build the stop-token set.  Gemma instruction models terminate a turn
+        # with <end_of_turn>, NOT the base <eos>.  The previous code passed only
+        # tokenizer.eos_token_id, which overrode the model's generation_config and
+        # meant generation never stopped — every segment ran to max_new_tokens
+        # (512), ~35s of wasted decode per sentence (and trailing garbage after
+        # the real translation).  Stop on both <eos> and <end_of_turn>.
+        eos_ids: list[int] = []
+        _base_eos = getattr(self.tokenizer, "eos_token_id", None)
+        if isinstance(_base_eos, int):
+            eos_ids.append(_base_eos)
+        try:
+            _eot = self.tokenizer.convert_tokens_to_ids("<end_of_turn>")
+            if isinstance(_eot, int) and _eot >= 0 and _eot != getattr(self.tokenizer, "unk_token_id", None):
+                eos_ids.append(_eot)
+        except Exception:
+            pass
+        eos_ids = list(dict.fromkeys(eos_ids)) or None
+
         translations: list[str] = []
-        for sentence in tqdm(sentences):
+        for _seg_idx, sentence in enumerate(tqdm(sentences)):
+            import time as _t
+            _seg_t0 = _t.perf_counter()
             safe_sentence = (sentence or "").strip()
 
             if self.prompt_style == "translategemma":
@@ -224,7 +244,7 @@ class LLMTranslationClient(TranslatorClient):
                         **inputs,
                         do_sample=temperature > 0,
                         max_new_tokens=max_new_tokens,
-                        eos_token_id=getattr(self.tokenizer, "eos_token_id", None),
+                        eos_token_id=eos_ids,
                         pad_token_id=getattr(self.tokenizer, "pad_token_id", None),
                         **(
                             {"temperature": temperature, "top_p": top_p}
@@ -238,6 +258,13 @@ class LLMTranslationClient(TranslatorClient):
 
             input_len = inputs["input_ids"].shape[-1]
             gen_tokens = out[0, input_len:]
+            _n_gen = int(gen_tokens.shape[-1])
+            _hit_cap = _n_gen >= max_new_tokens
+            print(
+                f"[timing] translate seg {_seg_idx}: {_n_gen} tok in "
+                f"{_t.perf_counter() - _seg_t0:.1f}s"
+                + (" <<< HIT max_new_tokens CAP (no EOS!)" if _hit_cap else "")
+            )
             translations.append(self.tokenizer.decode(gen_tokens, skip_special_tokens=True).strip())
 
         return translations

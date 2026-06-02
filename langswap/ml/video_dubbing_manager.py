@@ -7,6 +7,19 @@ from pyrubberband.pyrb import time_stretch
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
 
+# Silero VAD is a small, read-only model reused across every merge (and again on
+# the re-dub / update-translation path).  Load it once per process instead of on
+# each VideoDubbingManager construction.
+_VAD_MODEL = None
+
+
+def _get_vad_model():
+    global _VAD_MODEL
+    if _VAD_MODEL is None:
+        _VAD_MODEL = load_silero_vad()
+    return _VAD_MODEL
+
+
 class VideoDubbingManager:
     _file_repository: FileRepository
 
@@ -15,7 +28,7 @@ class VideoDubbingManager:
 
         self.logger = logger
 
-        self.model_vad = load_silero_vad()
+        self.model_vad = _get_vad_model()
     
     def get_pause(self, wav_path, sr, seconds=True):
         """

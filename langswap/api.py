@@ -1,5 +1,7 @@
 """Public API for langswap package."""
 import uuid
+import time
+from contextlib import contextmanager
 from dotenv import load_dotenv
 import boto3
 import os
@@ -49,9 +51,25 @@ def process_translation(input, progress_callback=None):
         else:
             print(message)
 
+    # Stage-level wall-clock timing.  The init-vs-inference split was previously
+    # only inferred from logs; this records it directly so optimization is
+    # data-driven.  Times are accumulated and printed as a summary at the end.
+    stage_times = {}
+
+    @contextmanager
+    def timed(stage):
+        t0 = time.perf_counter()
+        update_progress(f"[timing] {stage}: start")
+        try:
+            yield
+        finally:
+            dt = time.perf_counter() - t0
+            stage_times[stage] = dt
+            update_progress(f"[timing] {stage}: {dt:.1f}s")
+
     assert 'target_language' in input.keys(), "target language is missing from input"
     assert 'tts_engine' in input.keys(), "tts engine is missing from input"
-    
+
     # First progress update - Initialization
     update_progress("0% Initializing translation pipeline")
 
@@ -59,7 +77,8 @@ def process_translation(input, progress_callback=None):
 
     public_id = input.get('public_id', str(uuid.uuid4()))
     repo = RemoteFileRepository(public_id, BASE_DIR, s3_client)
-    file_path = get_file(repo, input.get("s3_video_url"))
+    with timed("download_input"):
+        file_path = get_file(repo, input.get("s3_video_url"))
     
     tts_engine = input.get("tts_engine", "chatterbox")
     if input.get('source_language') == "english" and input.get("target_language") == "russian" and input.get("tts_engine") == "xtts":
@@ -84,31 +103,40 @@ def process_translation(input, progress_callback=None):
         translation_backend=input.get("translation_backend", "local"),
     )
     
-    pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
-    
+    with timed("pipeline_init"):
+        pipeline = VideoTranslationPipeline(config=config, file_repository=repo)
+
     # Second progress update - Transcription
     update_progress("20% Starting transcription (Speech-to-Text)")
-    pipeline._generate_asr()
-    
+    with timed("asr"):
+        pipeline._generate_asr()
+
     # Third progress update - Translation
     update_progress("40% Starting translation")
-    pipeline._generate_translation()
-    
+    with timed("translation"):
+        pipeline._generate_translation()
+
     # Fourth progress update - Text-to-Speech
     update_progress("60% Starting Text-to-Speech synthesis")
-    pipeline._generate_speech()
-    
+    with timed("tts"):
+        pipeline._generate_speech()
+
     # Fifth progress update - Audio separation and merging
     update_progress("80% Starting audio separation and enhancement")
-    video_translation = pipeline._merge(pipeline.config.dubbing_algo)
-    
+    with timed("merge"):
+        video_translation = pipeline._merge(pipeline.config.dubbing_algo)
+
     # Generate SRT files - updated to use the method from the pipeline
     update_progress("95% Generating subtitle files")
-    source_srt, translated_srt = pipeline.generate_srt_files()
-    
+    with timed("srt"):
+        source_srt, translated_srt = pipeline.generate_srt_files()
+
     # Final progress update
+    total = sum(stage_times.values())
+    summary = " | ".join(f"{k}={v:.1f}s" for k, v in stage_times.items())
+    update_progress(f"[timing] TOTAL={total:.1f}s :: {summary}")
     update_progress("100% Translation pipeline completed successfully")
-    
+
     result_video = video_translation.processed_video
     
     # Return URLs for both the video and the SRT files

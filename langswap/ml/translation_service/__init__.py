@@ -64,10 +64,15 @@ class TranslationManager:
                             )
 
         else:
+            import time as _t
+            _t0 = _t.perf_counter()
             self._translator_client.load_models()
+            print(f"[timing] translation.load_models: {_t.perf_counter() - _t0:.1f}s")
+            _t1 = _t.perf_counter()
             translations = self._translator_client.translate(sentences=sentences_texts,
                                                          source_language=source_lang,
                                                          target_language=target_lang)
+            print(f"[timing] translation.generate ({len(sentences_texts)} segs): {_t.perf_counter() - _t1:.1f}s")
 
             translated_segments = []
             for s, t in zip(segments, translations):

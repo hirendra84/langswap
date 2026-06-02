@@ -7,7 +7,7 @@ from langswap.ml.text_to_speech_service.audio_dubbing_manager import AudioDubbin
 
 class DemucsClient:
 
-    def __init__(self):
+    def __init__(self, load_separator: bool = True):
         try:
             import demucs.api
         except ModuleNotFoundError as e:
@@ -15,9 +15,18 @@ class DemucsClient:
                 "Missing dependency `demucs` required for audio separation. "
                 "Install it with `pip install demucs`."
             ) from e
-        self._separator = demucs.api.Separator()
+        # The separator model load takes several seconds.  merge_background()
+        # never uses it, so callers on the merge-only path pass
+        # load_separator=False; separate() lazily loads it if ever needed.
+        self._separator = demucs.api.Separator() if load_separator else None
+
+    def _ensure_separator(self):
+        if self._separator is None:
+            import demucs.api
+            self._separator = demucs.api.Separator()
 
     def separate(self, audio_file_path: str, output_directory: str) -> list[tuple[str, str]]:
+        self._ensure_separator()
         background_files = []
         # check of already separated files
         if os.listdir(output_directory):

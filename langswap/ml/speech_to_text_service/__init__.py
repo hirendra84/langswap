@@ -137,17 +137,24 @@ class SpeechToTextManager:
         if num_speakers is not None:
             num_speakers = int(num_speakers)
 
+        import time as _t
         # 1. Get audio file (extract if video)
         # The original code implies audio_file could be a path string or a RemoteFile object at different stages.
         # For clarity, let's assume _get_audio_file returns the path to the (potentially newly extracted) audio file.
+        _t0 = _t.perf_counter()
         audio_file_path = self._get_audio_file(video_translation)
-        
+        print(f"[timing] asr.extract_audio: {_t.perf_counter() - _t0:.1f}s")
+
         # 2. Separate vocals and background
+        _t0 = _t.perf_counter()
         background_files = self._separate_vocals_and_background(audio_file_path)
+        print(f"[timing] asr.demucs_separate: {_t.perf_counter() - _t0:.1f}s")
         vocal_file_path = background_files["vocals.wav"] # Assuming Demucs always produces "vocals.wav"
 
         # 3. Transcribe vocals (or load from cache)
+        _t0 = _t.perf_counter()
         raw_transcribed_segments, source_lang_code = self._load_or_transcribe_audio(vocal_file_path, num_speakers)
+        print(f"[timing] asr.transcribe: {_t.perf_counter() - _t0:.1f}s")
 
         # 4. Remap pauses in segments (or load from cache)
         final_segments = self._load_or_remap_segments(raw_transcribed_segments)
