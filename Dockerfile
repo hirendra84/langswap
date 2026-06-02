@@ -8,6 +8,7 @@ FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
+    PIP_BREAK_SYSTEM_PACKAGES=1 \
     PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -52,9 +53,9 @@ COPY gradio_demo.py main.py serverless.py ./
 COPY langswap/__VERSION__ ./langswap/__VERSION__
 
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3-setuptools python3-wheel \
-        && rm -rf /var/lib/apt/lists/*
+# Reinstall pip/setuptools/wheel via uv so they carry pip metadata (RECORD);
+# the apt-packaged versions lack it and can't be upgraded/uninstalled later.
+RUN uv pip install pip setuptools wheel --system
 RUN uv pip install -e . --no-deps --no-build-isolation --system
 
 ENV MODEL_WEIGHTS_DIR=/models \

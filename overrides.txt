@@ -11,3 +11,9 @@
 # See requirements.lock.txt.
 transformers==5.9.0
 vllm==0.21.0
+
+# cattrs 25+/26 imports `NothingType` from attrs (added in attrs 25.1). The Modal
+# client pins attrs==24.2.0 into the same system Python, which lacks it -> ImportError
+# on `import langswap`. Pin cattrs to the 24.x line, which works with attrs 24.2 and
+# 26 alike, so the image runs on Modal, RunPod and locally.
+cattrs<25
