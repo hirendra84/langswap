@@ -99,7 +99,12 @@ def process_translation(input, progress_callback=None):
         eleven_api_token=input.get("token"),
         watermark=input.get("watermark", True),
         skip_diarization=input.get("skip_diarization", False),
-        asr_backend=input.get("asr_backend", "qwen"),
+        # Default to the VAD backend: faster-whisper + Silero VAD segmentation,
+        # no forced aligner and no per-language model — lightest and fastest, and
+        # VAD places segment boundaries as tightly as the Qwen aligner.  Override
+        # per-job with "asr_backend" ("qwen_onnx" / "qwen" / "whisperx") when a
+        # forced aligner or the larger ASR is needed (e.g. proper-noun accuracy).
+        asr_backend=input.get("asr_backend", "vad"),
         translation_backend=input.get("translation_backend", "local"),
     )
     

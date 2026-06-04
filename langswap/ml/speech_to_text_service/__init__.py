@@ -22,16 +22,18 @@ class SpeechToTextManager:
         device,
         logger,
         skip_diarization: bool = False,
-        backend: str = "qwen",
+        backend: str = "vad",
     ):
         """
         Initializes the SpeechToTextManager.
 
         Args:
             skip_diarization: If True, skips speaker diarization.
-            backend: ASR backend to use.  "qwen" (default) uses Qwen3-ASR +
-                     Qwen3-ForcedAligner.  "whisperx" uses the original
-                     WhisperX pipeline.
+            backend: ASR backend to use.  "vad" (default) uses faster-whisper +
+                     Silero VAD segmentation (no forced aligner, no per-language
+                     model — lightest and fastest).  "qwen" uses Qwen3-ASR +
+                     Qwen3-ForcedAligner.  "whisperx" uses the original WhisperX
+                     pipeline (whisper + per-language wav2vec2).
         """
         self.public_id = public_id
 
@@ -39,7 +41,14 @@ class SpeechToTextManager:
         # made import/run-compatible with transformers 5.x by the shim in
         # asr_qwen_client.py).  "openai" and "whisperx" are alternative backends.
         from langswap.model_pool import get_or_create
-        if backend == "qwen":
+        if backend == "vad":
+            # faster-whisper + Silero VAD segmentation. No forced aligner, no
+            # per-language model — the lightweight default.
+            from langswap.ml.speech_to_text_service.asr_vad_client import VADWhisperASR
+            self._asr_client = get_or_create(
+                ("asr", "vad", device, language, skip_diarization),
+                lambda: VADWhisperASR(device=device, language=language, skip_diarization=skip_diarization))
+        elif backend == "qwen":
             self._asr_client = get_or_create(
                 ("asr", "qwen", device, language, skip_diarization),
                 lambda: QwenASRX(device=device, language=language, skip_diarization=skip_diarization))

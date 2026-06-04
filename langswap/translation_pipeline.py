@@ -51,9 +51,9 @@ class VideoTranslationPipeline:
             device=self.config.device,
             logger=self.logger,
             skip_diarization=getattr(self.config, 'skip_diarization', False),
-            backend=getattr(self.config, 'asr_backend', 'qwen'),
+            backend=getattr(self.config, 'asr_backend', 'vad'),
         )
-        print(f"[timing] asr.load_models(vLLM init+compile): {_t.perf_counter() - _t0:.1f}s")
+        print(f"[timing] asr.load_models: {_t.perf_counter() - _t0:.1f}s")
         print(f"Transcribing audio file: {self.video_translation.source_file.file_path} with language: {self.config.source_lang}")
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers)
         if self.config.source_lang != None:
