@@ -9,6 +9,14 @@ data/
 app/
 model_weights/
 models_weights/
+# Leftover baked-weights staging dir from the old self-contained Docker flow — never commit.
+model_bundle/
+
+# Test/sample media and local run artifacts
+*.mp4
+*.mov
+*.mkv
+.gradio/
 
 # Local datasets / artifacts / vendor drops
 assets/

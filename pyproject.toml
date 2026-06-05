@@ -21,7 +21,6 @@ dependencies = [
     "huggingface_hub>=0.20.0",
     "attrs",
     "cattrs",
-    "pydantic",
     "numpy",
     "pandas",
     "tqdm",
@@ -29,10 +28,15 @@ dependencies = [
     "pydub",
 ]
 
+# uv is the only supported installer. One command per variant:
+#   uv pip install -e ".[gpu]"          # full local GPU stack
+#   uv pip install -e ".[api]"          # Mac/CPU, hosted APIs only
+#   uv pip install -e ".[gpu,runpod]"   # GPU image + RunPod worker (Docker)
+# The torch/llama-cpp wheel indexes are wired in [tool.uv] below, so no extra
+# index flags or pre-install steps are needed.
 [project.optional-dependencies]
-# Mac / CPU / API-only install — relies on hosted APIs (OpenAI ASR + translation,
-# ElevenLabs TTS) instead of the heavy local-model stack.  torch comes from PyPI
-# (CPU/MPS build).  Install:  pip install -e ".[api]"
+# Mac / CPU / API-only — hosted APIs (OpenAI ASR + translation, ElevenLabs TTS)
+# instead of the local-model stack. torch resolves from PyPI (CPU/MPS build).
 api = [
     "torch",
     "torchaudio",
@@ -44,41 +48,66 @@ api = [
     "gradio>=4.0.0",
 ]
 
-# Full GPU install with local models (ASR/translation/TTS run on-device).
-# torch MUST be installed first from the CUDA index (see docs/advanced.md §2):
-#   pip install "torch==2.11.0" "torchaudio==2.11.0" --index-url https://download.pytorch.org/whl/cu130
-# and qwen-asr / qwen-tts added afterwards with --no-deps (they hard-pin an older
-# transformers but run on 5.x via the in-process compat shims):
-#   pip install qwen-asr qwen-tts --no-deps
-# transformers/vllm are pinned to the validated pair (matches overrides.txt + the lock).
+# Full GPU install with local models (ASR/translation/TTS on-device).
+# torch/torchaudio/torchcodec resolve from the CUDA 13 index (see [tool.uv]).
 gpu = [
+    "torch",
+    "torchaudio",
+    "torchcodec",
     "transformers==5.9.0",
     "vllm==0.21.0",
     "vllm-omni",
+    "qwen-omni-utils",
     "accelerate",
     "safetensors>=0.4.3",
-    "tokenizers>=0.22.0,<=0.23.0",
+    "tokenizers>=0.22.0",
     "sentencepiece",
     "protobuf",
-    "whisperx",
-    "torchcodec",
+    "faster-whisper",
+    "llama-cpp-python",
+    "nvidia-cublas-cu12",
     "demucs @ git+https://github.com/shigabeev/demucs@9e454051dc5ed957b13525eaad82a2e74e8e5dcb",
     "pyrubberband",
     "silero-vad",
-    "openai",
-    "elevenlabs>=2.36.1",
     "gradio>=4.0.0",
+    # whisperx is optional: install it separately to enable speaker diarization.
+    # Without it the pipeline runs single-speaker (skip_diarization default).
 ]
 
-demo = [
-    "gradio>=4.0.0",
-]
+# RunPod serverless worker (serverless.py). The Docker image installs ".[gpu,runpod]".
+runpod = ["runpod"]
+
+# Modal deployment surface (modal_app.py), driven from a dev machine.
+modal = ["modal", "fastapi"]
 
 dev = [
     "pytest",
     "ruff",
 ]
 
+# ── uv wheel-index wiring ─────────────────────────────────────────────────────
+# torch/torchaudio/torchcodec for the gpu extra come from the CUDA 13 wheel index;
+# llama-cpp-python uses its prebuilt CPU wheel (no nvcc/compile, and leaves the GPU
+# to OmniVoice). The api extra's torch resolves from PyPI (CPU/MPS). The conflict
+# declaration lets uv keep both torch sources straight.
+[tool.uv]
+conflicts = [[{ extra = "api" }, { extra = "gpu" }]]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "llama-cpp-cpu"
+url = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", extra = "gpu" }]
+torchaudio = [{ index = "pytorch-cu130", extra = "gpu" }]
+torchcodec = [{ index = "pytorch-cu130", extra = "gpu" }]
+llama-cpp-python = { index = "llama-cpp-cpu" }
 
 [tool.setuptools.dynamic]
 version = {file = "langswap/__VERSION__"}

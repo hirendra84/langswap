@@ -54,17 +54,15 @@ class TranslationPipelineConfig:
     source_video_path: Union[Path, str]
     base_dir: Union[Path, str]
     public_id: str
-    voice_conv: bool = field(default=False)
     num_speakers: int = field(default=None)
     device: str = field(default="cuda")
     name: str = field(default="example")
     dubbing_algo: Literal["speedup", "pause_based", "stretch_whole"] = field(default="speedup")
-    tts_model: Literal["xtts", "f5tts", "elevenlabs", "qwen3", "omnivoice", "chatterbox"] = field(default=None)
-    eleven_api_token: str = field(default=None)
+    tts_model: Literal["omnivoice", "elevenlabs"] = field(default="omnivoice")
     watermark: bool = field(default=False)
     skip_diarization: bool = field(default=False)  # Skip speaker diarization (useful when pyannote models unavailable)
-    asr_backend: str = field(default="qwen")  # "qwen" | "whisperx" | "openai"
-    translation_backend: str = field(default="local")  # "local" | "vllm" | "openai"
+    asr_backend: str = field(default="vad")  # "vad" | "openai"
+    translation_backend: str = field(default="llamacpp")  # "llamacpp" | "openai"
 
 
 

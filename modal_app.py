@@ -31,8 +31,6 @@ app = modal.App("langswap-dub")
 # Ubuntu 24.04's PEP-668 "externally managed" system Python.
 image = modal.Image.from_dockerfile("Dockerfile").env({
     "MODEL_WEIGHTS_DIR": "/models",
-    # Reuse loaded models across jobs in a warm container (load once, not per job).
-    "LANGSWAP_WARM_REUSE": "1",
 })
 
 # Persistent weights cache: HF/torch downloads land here on first use and stick.

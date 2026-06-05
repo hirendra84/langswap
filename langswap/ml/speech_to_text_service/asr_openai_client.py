@@ -6,7 +6,7 @@ import cattrs
 
 from langswap.model_config import MODEL_WEIGHTS_DIR
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
-from langswap.ml.speech_to_text_service.asr_qwen_client import (
+from langswap.ml.speech_to_text_service.asr_types import (
     Output,
     TranscriptionData,
     _group_words_into_segments,
@@ -20,8 +20,7 @@ class OpenAIASRClient:
     ASR client: OpenAI Whisper API for transcription + word timestamps,
     pyannote (via whisperx) for speaker diarization.
 
-    Drop-in replacement for QwenASRX / ASRX: same constructor signature and
-    transcribe() return type.
+    Same constructor signature and transcribe() return type as the VAD backend.
 
     Requires OPENAI_API_KEY env var.
     Diarization requires pyannote model weights (same as other backends); they
@@ -60,7 +59,7 @@ class OpenAIASRClient:
         self.load_models()
 
     # ------------------------------------------------------------------
-    # Context-manager protocol (mirrors QwenASRX)
+    # Context-manager protocol (mirrors the VAD backend)
     # ------------------------------------------------------------------
 
     def __enter__(self):
@@ -175,7 +174,7 @@ class OpenAIASRClient:
             ]
         }
 
-        # 3. Diarize + assign speakers per word (same as QwenASRX)
+        # 3. Diarize + assign speakers per word
         if not self.skip_diarization and self.diarize_model is not None:
             import whisperx
             audio = whisperx.load_audio(source_file)

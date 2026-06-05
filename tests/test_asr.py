@@ -5,15 +5,77 @@ Following the albumentations testing pattern with fixtures and parametrization.
 import pytest
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import numpy as np
-import torch
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from langswap.ml.speech_to_text_service.asr_client import ASRX, Segment, Output, TranscriptionData
+from langswap.ml.speech_to_text_service.asr_types import Segment, Output, TranscriptionData
+from langswap.ml.speech_to_text_service.asr_vad_client import _group_words_by_vad
+from langswap.ml.speech_to_text_service.speech_to_text_manager import SpeechToTextManager
+from langswap.pipeline_models.models import TextedSegment
+
+
+def _word(text, start, end, speaker="SPEAKER_00"):
+    return {"word": text, "start": start, "end": end, "speaker": speaker}
+
+
+class TestGroupWordsByVad:
+    """_group_words_by_vad assigns whisper words to Silero VAD speech regions.
+
+    Pure logic (no silero-vad / faster-whisper needed): runs in the lean env.
+    """
+
+    def test_words_grouped_by_midpoint(self):
+        """Each word lands in the region containing its midpoint; segment
+        boundaries come from the VAD region, text from whisper."""
+        words = [
+            _word("hello", 0.0, 0.4),   # mid 0.2 -> region 0
+            _word("there", 0.5, 0.9),   # mid 0.7 -> region 0
+            _word("world", 2.1, 2.5),   # mid 2.3 -> region 1
+        ]
+        regions = [(0.0, 1.0), (2.0, 3.0)]
+        segments = _group_words_by_vad(words, regions)
+        assert len(segments) == 2
+        assert segments[0]["text"] == "hello there"
+        assert segments[0]["start"] == 0.0
+        assert segments[0]["end"] == 1.0
+        assert segments[1]["text"] == "world"
+        assert segments[1]["start"] == 2.0
+        assert segments[1]["end"] == 3.0
+
+    def test_word_in_gap_assigned_to_nearest_region(self):
+        """A word whose midpoint falls in VAD silence goes to the nearest region,
+        so no transcript text is lost."""
+        words = [
+            _word("hi", 0.0, 0.4),      # mid 0.2 -> region 0
+            _word("gap", 1.3, 1.5),     # mid 1.4 -> nearest is region 0 (d=0.4) over region 1 (d=0.6)
+            _word("bye", 2.1, 2.5),     # mid 2.3 -> region 1
+        ]
+        regions = [(0.0, 1.0), (2.0, 3.0)]
+        segments = _group_words_by_vad(words, regions)
+        rendered = " ".join(s["text"] for s in segments)
+        assert "hi" in rendered and "gap" in rendered and "bye" in rendered
+        assert segments[0]["text"] == "hi gap"
+        assert segments[1]["text"] == "bye"
+
+    def test_empty_regions_fallback_single_segment(self):
+        """No VAD regions -> a single fallback segment spanning the words."""
+        words = [
+            _word("only", 0.5, 0.9),
+            _word("speech", 1.0, 1.4),
+        ]
+        segments = _group_words_by_vad(words, [])
+        assert len(segments) == 1
+        assert segments[0]["text"] == "only speech"
+        assert segments[0]["start"] == 0.5
+        assert segments[0]["end"] == 1.4
+
+    def test_empty_words(self):
+        """No words -> no segments, with or without regions."""
+        assert _group_words_by_vad([], [(0.0, 1.0)]) == []
+        assert _group_words_by_vad([], []) == []
+
 
 
 class TestSegment:
@@ -66,129 +128,6 @@ class TestOutput:
         assert len(output.segments) == 1
 
 
-@patch('src.ml.speech_to_text_service.asr_client.whisperx')
-class TestASRX:
-    """Test ASRX class with mocked dependencies."""
-    
-    def test_init(self, mock_whisperx, mock_device):
-        """Test ASRX initialization."""
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device=mock_device, language="en")
-            assert asr.device == mock_device
-            assert asr.language == "en"
-    
-    def test_init_no_language(self, mock_whisperx, mock_device):
-        """Test ASRX initialization without language."""
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device=mock_device, language=None)
-            assert asr.language is None
-    
-    @pytest.mark.parametrize("language", ["en", "es", "fr", "de"])
-    def test_init_different_languages(self, mock_whisperx, language, mock_device):
-        """Test ASRX initialization with different languages."""
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device=mock_device, language=language)
-            assert asr.language == language
-    
-    def test_load_models(self, mock_whisperx, mock_device):
-        """Test model loading."""
-        mock_whisperx.load_model.return_value = Mock()
-        mock_whisperx.DiarizationPipeline.return_value = Mock()
-        
-        with patch('os.path.exists', return_value=True), \
-             patch('os.chdir'), \
-             patch('pathlib.Path.cwd'), \
-             patch('pathlib.Path.resolve'):
-            asr = ASRX(device=mock_device, language="en")
-            asr.load_models()
-            
-            mock_whisperx.load_model.assert_called_once()
-            mock_whisperx.DiarizationPipeline.assert_called_once()
-    
-    def test_context_manager(self, mock_whisperx, mock_device):
-        """Test ASRX as context manager."""
-        with patch('os.path.exists', return_value=True):
-            with ASRX(device=mock_device, language="en") as asr:
-                assert asr.model is not None
-            # After exit, models should be cleared
-            assert asr.model is None
-            assert asr.diarize_model is None
-    
-    def test_transcribe_basic(self, mock_whisperx, mock_device, sample_audio_file):
-        """Test basic transcription functionality."""
-        # Setup mocks
-        mock_whisperx.load_audio.return_value = np.array([0.1, 0.2, 0.3])
-        mock_whisperx.load_align_model.return_value = (Mock(), Mock())
-        mock_whisperx.align.return_value = {
-            "segments": [
-                {
-                    "start": 0.0,
-                    "end": 1.0,
-                    "text": "test",
-                    "words": [{"word": "test", "start": 0.0, "end": 1.0}]
-                }
-            ]
-        }
-        mock_whisperx.assign_word_speakers.return_value = {
-            "segments": [
-                {
-                    "start": 0.0,
-                    "end": 1.0,
-                    "text": "test",
-                    "words": [{"word": "test", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_00"}]
-                }
-            ]
-        }
-        
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device=mock_device, language="en")
-            asr.model = Mock()
-            asr.model.transcribe.return_value = {
-                "segments": [],
-                "language": "en"
-            }
-            asr.diarize_model = Mock()
-            asr.diarize_model.return_value = {"segments": []}
-            
-            result = asr.transcribe(sample_audio_file)
-            
-            assert isinstance(result, Output)
-            assert result.detected_language == "en"
-            mock_whisperx.load_audio.assert_called_once_with(sample_audio_file)
-    
-    @pytest.mark.parametrize("num_speakers", [None, 2, 3, 5])
-    def test_transcribe_with_speakers(self, mock_whisperx, num_speakers, mock_device, sample_audio_file):
-        """Test transcription with different number of speakers."""
-        # Setup basic mocks
-        mock_whisperx.load_audio.return_value = np.array([0.1, 0.2, 0.3])
-        mock_whisperx.load_align_model.return_value = (Mock(), Mock())
-        mock_whisperx.align.return_value = {"segments": []}
-        mock_whisperx.assign_word_speakers.return_value = {"segments": []}
-        
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device=mock_device, language="en")
-            asr.model = Mock()
-            asr.model.transcribe.return_value = {"segments": [], "language": "en"}
-            asr.diarize_model = Mock()
-            asr.diarize_model.return_value = {"segments": []}
-            
-            result = asr.transcribe(sample_audio_file, num_speakers=num_speakers)
-            
-            # Verify diarization was called with correct parameters
-            asr.diarize_model.assert_called_once()
-            call_args = asr.diarize_model.call_args
-            if num_speakers is not None:
-                assert call_args[1]['num_speakers'] == num_speakers
-    
-    def test_get_cache_dir(self, mock_whisperx, mock_device):
-        """Test cache directory retrieval."""
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device=mock_device, language="en")
-            cache_dir = asr.get_cache_dir()
-            assert cache_dir is not None
-            assert isinstance(cache_dir, (str, Path))
-
-
 class TestTranscriptionDataStructures:
     """Test transcription data structures and conversions."""
     
@@ -222,39 +161,80 @@ class TestTranscriptionDataStructures:
         assert all(word["speaker"] == "SPEAKER_00" for word in segment.words)
 
 
-class TestASREdgeCases:
-    """Test edge cases and error conditions."""
-    
-    @patch('src.ml.speech_to_text_service.asr_client.whisperx')
-    def test_missing_diarization_model(self, mock_whisperx, mock_device):
-        """Test behavior when diarization model is missing."""
-        with patch('os.path.exists', return_value=False):
-            with pytest.raises(FileNotFoundError):
-                ASRX(device=mock_device, language="en")
-    
-    @patch('src.ml.speech_to_text_service.asr_client.whisperx')
-    def test_empty_audio_file(self, mock_whisperx, mock_device, tmp_path):
-        """Test handling of empty audio file."""
-        empty_file = tmp_path / "empty.wav"
-        empty_file.touch()
-        
-        mock_whisperx.load_audio.side_effect = Exception("Invalid audio file")
-        
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device=mock_device, language="en")
-            asr.model = Mock()
-            asr.diarize_model = Mock()
-            
-            with pytest.raises(Exception):
-                asr.transcribe(str(empty_file))
-    
-    @patch('src.ml.speech_to_text_service.asr_client.whisperx')
-    def test_device_switching(self, mock_whisperx, mock_device):
-        """Test device switching behavior."""
-        with patch('os.path.exists', return_value=True):
-            asr = ASRX(device="cuda", language="en")
-            assert asr.device == "cuda"
-            
-            # Test with CPU fallback
-            asr_cpu = ASRX(device="cpu", language="en")
-            assert asr_cpu.device == "cpu" 
+class TestRemapPauses:
+    """Test SpeechToTextManager._remap_pauses segment merging.
+
+    _remap_pauses never touches `self`, so we exercise it as the pure function
+    it is by passing None as the bound instance — this avoids constructing the
+    Manager (which would eagerly build a heavy ASR backend).
+    """
+
+    @staticmethod
+    def _remap(entries, **kwargs):
+        return SpeechToTextManager._remap_pauses(None, entries, **kwargs)
+
+    def test_merges_on_short_pause(self):
+        """Words separated by a sub-threshold gap collapse into one segment."""
+        entries = [
+            {"text": "one", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_00"},
+            {"text": "two", "start": 1.1, "end": 4.0, "speaker": "SPEAKER_00"},  # gap 0.1 < 0.25
+        ]
+        result = self._remap(entries)
+        assert len(result) == 1
+        assert isinstance(result[0], TextedSegment)
+        assert result[0].text == "one two"
+        assert result[0].start == 0.0
+        assert result[0].end == 4.0
+
+    def test_splits_on_long_pause(self):
+        """A gap >= pause_threshold ends the current segment."""
+        entries = [
+            {"text": "one", "start": 0.0, "end": 3.0, "speaker": "SPEAKER_00"},
+            {"text": "two", "start": 3.5, "end": 6.5, "speaker": "SPEAKER_00"},  # gap 0.5 >= 0.25
+        ]
+        result = self._remap(entries)
+        assert len(result) == 2
+        assert result[0].text == "one"
+        assert result[1].text == "two"
+        assert result[1].start == 3.5
+
+    def test_splits_on_speaker_change(self):
+        """A speaker change ends the current segment even with no pause."""
+        entries = [
+            {"text": "one", "start": 0.0, "end": 3.0, "speaker": "SPEAKER_00"},
+            {"text": "two", "start": 3.0, "end": 6.0, "speaker": "SPEAKER_01"},
+        ]
+        result = self._remap(entries)
+        assert len(result) == 2
+        assert result[0].speaker == "SPEAKER_00"
+        assert result[1].speaker == "SPEAKER_01"
+
+    def test_skips_non_text_entries(self):
+        """Entries without alphabetic characters are dropped, not merged in."""
+        entries = [
+            {"text": "one", "start": 0.0, "end": 3.0, "speaker": "SPEAKER_00"},
+            {"text": "...", "start": 3.1, "end": 3.3, "speaker": "SPEAKER_00"},  # no letters
+            {"text": "two", "start": 4.0, "end": 7.0, "speaker": "SPEAKER_00"},  # gap from 3.0 >= 0.25
+        ]
+        result = self._remap(entries)
+        assert len(result) == 2
+        assert all("..." not in seg.text for seg in result)
+        assert result[0].text == "one"
+        assert result[1].text == "two"
+
+    def test_short_trailing_segment_folds_into_previous(self):
+        """A short (<3s) final segment is merged into its predecessor and removed.
+
+        Regression: the trailing-segment merge used to fold the short last
+        segment's text/end into pairs[-2] without dropping pairs[-1], so the
+        last text appeared twice (e.g. ["one two", "two"]).
+        """
+        entries = [
+            {"text": "one", "start": 0.0, "end": 3.0, "speaker": "SPEAKER_00"},
+            {"text": "two", "start": 3.5, "end": 4.5, "speaker": "SPEAKER_00"},  # gap 0.5 split; 1.0s < 3
+        ]
+        result = self._remap(entries)
+        assert len(result) == 1
+        assert result[0].text == "one two"
+        assert result[0].start == 0.0
+        assert result[0].end == 4.5

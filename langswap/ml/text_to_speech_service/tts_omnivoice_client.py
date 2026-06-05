@@ -7,11 +7,13 @@ import numpy as np
 import soundfile as sf
 from tqdm.auto import tqdm
 
-from langswap.model_config import resolve_model
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 
 logger = logging.getLogger(__name__)
+
+MODEL_ID = "k2-fsa/OmniVoice"
+STAGE_INIT_TIMEOUT = 600
 
 
 class OmniVoiceClient:
@@ -23,45 +25,21 @@ class OmniVoiceClient:
 
     def __init__(
         self,
-        model_id: str = "k2-fsa/OmniVoice",
-        model_path: Optional[str] = None,
+        model_id: str = MODEL_ID,
         device: str = "cuda",
-        stage_config_path: Optional[str] = None,
-        stage_init_timeout: Optional[int] = None,
-        log_stats: Optional[bool] = None,
     ):
-        self.model_id = resolve_model("LANGSWAP_OMNIVOICE_MODEL", "k2-fsa/OmniVoice", model_path)
+        self.model_id = model_id
         self.device = device
         self.sample_rate = 24000
-        self.stage_config_path = self._resolve_stage_config_path(stage_config_path)
-        self.stage_init_timeout = int(
-            stage_init_timeout
-            if stage_init_timeout is not None
-            else os.environ.get("LANGSWAP_OMNIVOICE_STAGE_INIT_TIMEOUT", 600)
+        self.stage_config_path = str(
+            Path(__file__).resolve().parent / "configs" / "omnivoice_vllm_stage.yaml"
         )
-        self.log_stats = self._env_bool("LANGSWAP_OMNIVOICE_LOG_STATS", default=False) if log_stats is None else log_stats
+        self.stage_init_timeout = STAGE_INIT_TIMEOUT
+        self.log_stats = False
         self.model = None
         self._sampling_params_cls = None
         self._warned_duration_unsupported = False
         self.load_models()
-
-    @staticmethod
-    def _env_bool(name: str, default: bool) -> bool:
-        value = os.environ.get(name)
-        if value is None:
-            return default
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-
-    def _resolve_stage_config_path(self, stage_config_path: Optional[str]) -> str:
-        if stage_config_path:
-            return str(Path(stage_config_path).expanduser().resolve())
-
-        env_path = os.environ.get("LANGSWAP_OMNIVOICE_STAGE_CONFIG")
-        if env_path:
-            return str(Path(env_path).expanduser().resolve())
-
-        bundled = Path(__file__).resolve().parent / "configs" / "omnivoice_vllm_stage.yaml"
-        return str(bundled)
 
     def _normalize_language(self, language: Optional[str]) -> Optional[str]:
         if not language:

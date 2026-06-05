@@ -3,17 +3,16 @@ from typing import List
 
 from tqdm import tqdm
 
-from langswap.ml.translation_service.translator_client import TranslatorClient
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 
-class OpenAITranslationClient(TranslatorClient):
+class OpenAITranslationClient:
     """
     Translation client using the OpenAI Chat Completions API. No local GPU needed
     — works on Mac.
 
-    Drop-in replacement for LLMTranslationClient: same load_models() /
-    translate() interface.
+    Same load_models() / translate() interface as the other translator
+    clients.
 
     Requires OPENAI_API_KEY env var.
     """
@@ -23,7 +22,7 @@ class OpenAITranslationClient(TranslatorClient):
         device: str = "cpu",
         model: str = "gpt-4o-mini",
     ):
-        super().__init__(device)
+        self.device = device
         self.model = model
         self._client = None
 

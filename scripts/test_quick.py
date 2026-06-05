@@ -51,16 +51,16 @@ def extract_clip(video_path: str):
 
 
 def run_asr():
-    print("\n[ASR] Loading Qwen3-ASR-0.6B …")
-    from langswap.ml.speech_to_text_service.asr_qwen_client import QwenASRX
+    print("\n[ASR] Loading faster-whisper + VAD …")
+    from langswap.ml.speech_to_text_service.asr_vad_client import VADWhisperASR
 
-    client = QwenASRX(
+    print("[ASR] Transcribing …")
+    with VADWhisperASR(
         device=DEVICE,
         language=SOURCE_LANG,
         skip_diarization=True,
-    )
-    print("[ASR] Transcribing …")
-    output = client.transcribe(CLIP_PATH)
+    ) as client:
+        output = client.transcribe(CLIP_PATH)
     print(f"[ASR] detected_language={output.detected_language}")
     print(f"[ASR] transcription={output.transcription!r}")
     print(f"[ASR] segments ({len(output.segments)}):")
@@ -77,9 +77,9 @@ def run_asr():
 
 def run_translation(segments):
     print("\n[Translation] Loading TranslateGemma …")
-    from langswap.ml.translation_service.translator_client import LLMTranslationClient
+    from langswap.ml.translation_service.translator_llamacpp_client import LlamaCppTranslationClient
 
-    client = LLMTranslationClient(device=DEVICE)
+    client = LlamaCppTranslationClient(device=DEVICE)
     client.load_models()
 
     texts = [s["text"] for s in segments]
@@ -103,10 +103,10 @@ def run_translation(segments):
 
 
 def run_tts(segments):
-    print("\n[TTS] Loading Qwen3-TTS …")
-    from langswap.ml.text_to_speech_service.tts_qwen3_client import Qwen3TTSClient
+    print("\n[TTS] Loading OmniVoice …")
+    from langswap.ml.text_to_speech_service.tts_omnivoice_client import OmniVoiceClient
 
-    client = Qwen3TTSClient(device=DEVICE)
+    client = OmniVoiceClient(device=DEVICE)
 
     for i, seg in enumerate(segments):
         text = seg.get("translation") or seg["text"]

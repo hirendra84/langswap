@@ -3,7 +3,7 @@
 Measures, on the SAME audio in one container, the wall-clock (load + inference)
 of three ways to get transcript + word-level timestamps:
 
-  A. baseline  - vLLM Qwen3-ASR-1.7B (what the pipeline uses today)
+  A. baseline  - faster-whisper large-v3 + Silero VAD (what the pipeline uses today)
   B. sherpa    - sherpa-onnx Qwen3-ASR-0.6B-int8 (ONNX, CUDA) + Qwen3ForcedAligner (torch, CUDA)
   C. femelo    - py-qwen3-asr-cpp: ASR + aligner both GGUF q8 (llama.cpp, CPU-only)
 
@@ -87,11 +87,12 @@ def bench(job_input: dict):
             except Exception:
                 pass
 
-    # ---- A. baseline: vLLM Qwen3-ASR-1.7B ------------------------------------
-    def a_vllm():
-        from langswap.ml.speech_to_text_service.asr_qwen_client import QwenASRX
+    # ---- A. baseline: faster-whisper + VAD (what the pipeline uses today) -----
+    def a_vad():
+        from langswap.ml.speech_to_text_service.asr_vad_client import VADWhisperASR
         t = time.perf_counter()
-        c = QwenASRX(device="cuda", language="english", skip_diarization=True)
+        c = VADWhisperASR(device="cuda", language="english", skip_diarization=True)
+        c.__enter__()
         load = time.perf_counter() - t
         t = time.perf_counter()
         o = c.transcribe(wav)
@@ -180,7 +181,7 @@ def bench(job_input: dict):
                 print(f"[bench] femelo ids {asr_id} failed: {e!r}", flush=True)
         raise RuntimeError(f"all femelo model-id candidates failed; last={last!r}")
 
-    run("A_vllm_1.7B", a_vllm)
+    run("A_vad_whisper_large-v3", a_vad)
     run("B_sherpa_0.6B_int8_gpu+torch_align", b_sherpa)
     run("C_femelo_0.6B_gguf_cpu", c_femelo)
 

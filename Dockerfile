@@ -1,8 +1,13 @@
-# Build:  docker build -t langswap:latest .
-# Run:    docker run --rm --gpus all -p 7860:7860 \
-#           -v "$PWD/models_weights:/models" -v "$PWD/data:/app/data" \
-#           langswap:latest
-#         # then open http://localhost:7860
+# RunPod serverless image: the container runs the RunPod handler (serverless.py),
+# not the Gradio UI.  Model weights live in MODEL_WEIGHTS_DIR (a mounted volume),
+# auto-downloaded on first use if absent — they are not baked into image layers.
+#
+# Build:         docker build -t langswap/video-translation-pipeline:4.0-base .
+# Warm the public models / vLLM + torch.compile caches and commit the final
+# image:         scripts/warm_and_commit.sh
+#
+# There is no web server — the worker pulls jobs from the RunPod queue. To smoke
+# it locally:    docker run --rm --gpus all <image>   # boots the handler
 
 FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
 
@@ -38,29 +43,42 @@ ENV UV_PYTHON=/usr/bin/python3 \
 
 WORKDIR /app
 
-COPY requirements.txt overrides.txt pyproject.toml ./
-RUN uv pip install -r requirements.txt --override overrides.txt --system && \
-    uv pip install 'gradio>=4.0.0' fastapi 'safetensors>=0.4.3' \
-                       'tokenizers>=0.22.0,<=0.23.0' accelerate sentencepiece protobuf \
-                       --override overrides.txt --system
-
-RUN uv pip install qwen-asr qwen-tts --no-deps --system && \
-    uv pip install nagisa soynlp librosa qwen-omni-utils runpod sherpa-onnx \
-        --override overrides.txt --system
-
+# Single source of truth for dependencies: pyproject.toml + uv. The ".[gpu]"
+# extra pulls the whole local stack — torch/torchaudio/torchcodec from the CUDA 13
+# index and llama-cpp-python from its prebuilt CPU wheel (both wired in
+# pyproject's [tool.uv]); transformers/vllm/vllm-omni (OmniVoice), faster-whisper
+# (VAD ASR), silero-vad, and the qwen-omni-utils OmniVoice runtime helper. The
+# "runpod" extra adds the serverless worker SDK (serverless.py).
+#
+# nvidia-cublas-cu12 (in the gpu extra): this is a CUDA-13 image (cu130 torch/
+# vLLM/OmniVoice), but ctranslate2 (faster-whisper's backend) links cuBLAS *12*
+# (libcublas.so.12) — absent here, so GPU ASR would crash with "Library
+# libcublas.so.12 is not found". cuDNN 9 is already present (cu13, used by torch)
+# and is ABI-compatible, so we add ONLY cuBLAS-12 — NOT nvidia-cudnn-cu12, which
+# would overwrite the cu13 cuDNN torch/vLLM rely on. The cu12 and cu13 cuBLAS
+# coexist in nvidia/cublas/lib (distinct .so.12/.so.13); ctranslate2's RPATH
+# ($ORIGIN/../nvidia/cublas/lib) finds .so.12 with no LD_LIBRARY_PATH needed.
+COPY pyproject.toml README.md ./
 COPY langswap/ ./langswap/
 COPY gradio_demo.py main.py serverless.py ./
-COPY langswap/__VERSION__ ./langswap/__VERSION__
-
 
 # Reinstall pip/setuptools/wheel via uv so they carry pip metadata (RECORD);
 # the apt-packaged versions lack it and can't be upgraded/uninstalled later.
 RUN uv pip install pip setuptools wheel --system
-RUN uv pip install -e . --no-deps --no-build-isolation --system
+RUN uv pip install -e ".[gpu,runpod]" --system
 
-ENV MODEL_WEIGHTS_DIR=/models \
+# MODEL_WEIGHTS_DIR should be a mounted volume holding the model weights (OmniVoice,
+# faster-whisper large-v3, the Gemma-4-12B GGUF under gemma-4-12b-it-GGUF/, pyannote
+# configs).  Anything absent is auto-downloaded into it on first use.
+ENV MODEL_WEIGHTS_DIR=/app/models_weights \
     LANGSWAP_DATA_DIR=/app/data
+# ASR runs on GPU (faster-whisper large-v3, float16).  The only missing piece on
+# this CUDA-13 image was cuBLAS-12, added above (nvidia-cublas-cu12); cuDNN 9 is
+# already present.
 
-EXPOSE 7860
-
-CMD ["python", "-u", "gradio_demo.py", "--host", "0.0.0.0", "--port", "7860"]
+# No EXPOSE: the RunPod serverless worker pulls jobs from the queue and serves no
+# HTTP port (the old EXPOSE 7860 belonged to the Gradio UI).
+#
+# RunPod serverless handler — NOT the Gradio UI.  Running gradio_demo.py here is
+# why jobs previously sat in_queue: no handler ever registered with RunPod.
+CMD ["python", "-u", "serverless.py"]

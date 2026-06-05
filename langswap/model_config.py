@@ -1,14 +1,13 @@
 """
 Model Configuration
 
-Resolves the model weights/cache directory, points every model library at it,
-and provides a tiny helper for resolving model ids.  Models are loaded directly
-from HuggingFace and auto-downloaded on first use (no custom downloader layer).
+Resolves the model weights/cache directory and points every model library at it.
+Models are loaded directly from HuggingFace and auto-downloaded on first use (no
+custom downloader layer).
 """
 
 import os
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -57,14 +56,4 @@ os.environ.setdefault("VLLM_CACHE_ROOT", _vllm_cache)
 os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", _inductor_cache)
 
 
-def resolve_model(env_var: str, default_repo_id: str, explicit: Optional[str] = None) -> str:
-    """Resolve a model id/path to hand straight to a loader.
-
-    Precedence: ``explicit`` arg → ``$env_var`` → ``default_repo_id``.  The
-    default is a HuggingFace repo id, which loaders auto-download into
-    ``MODEL_WEIGHTS_DIR`` on first use.  A local path is returned unchanged.
-    """
-    return explicit or os.environ.get(env_var) or default_repo_id
-
-
-__all__ = ["MODEL_WEIGHTS_DIR", "resolve_model"]
+__all__ = ["MODEL_WEIGHTS_DIR"]

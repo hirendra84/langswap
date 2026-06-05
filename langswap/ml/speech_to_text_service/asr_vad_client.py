@@ -12,8 +12,8 @@ Pipeline: faster-whisper transcribes the whole clip with word timestamps; Silero
 VAD finds speech regions; each word is assigned to its VAD region by midpoint;
 segments = VAD regions (accurate edges) carrying their whisper words' text.
 
-Drop-in for QwenASRX: same constructor signature, __enter__/__exit__, and
-transcribe() return type.
+Same constructor signature, __enter__/__exit__, and transcribe() return type
+as the other ASR backends.
 """
 
 import os
@@ -21,11 +21,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from langswap.model_config import MODEL_WEIGHTS_DIR, resolve_model
+from langswap.model_config import MODEL_WEIGHTS_DIR
 from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
-# Reuse the structures + pause threshold from the qwen client (single source).
-from langswap.ml.speech_to_text_service.asr_qwen_client import (
+# Reuse the structures + pause threshold from the shared types module (single source).
+from langswap.ml.speech_to_text_service.asr_types import (
     Output,
     TranscriptionData,
     PAUSE_THRESHOLD_SECONDS,
@@ -105,10 +105,7 @@ class VADWhisperASR:
     ) -> None:
         self.device = device
         self.skip_diarization = skip_diarization
-        # Reuse the same env var as the WhisperX backend so the whisper weights
-        # are shared between backends.
-        self.whisper_model_id = resolve_model(
-            "LANGSWAP_WHISPERX_MODEL", "large-v3", whisper_model_id)
+        self.whisper_model_id = whisper_model_id or "large-v3"
 
         if language is not None:
             self.language = map_language_to_code(language, system="whisper")
@@ -135,11 +132,8 @@ class VADWhisperASR:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        from langswap.model_pool import warm_reuse_enabled
-        if warm_reuse_enabled():
-            return False
-        self.asr_model = None
-        self.diarize_model = None
+        # warm reuse is always on; keep models resident across jobs
+        return False
 
     def load_models(self):
         if getattr(self, "asr_model", None) is not None:
@@ -151,32 +145,58 @@ class VADWhisperASR:
 
     def _load_asr_model(self):
         import faster_whisper
-        compute_type = "int8" if str(self.device).startswith("cuda") else "float32"
+        # faster-whisper's CTranslate2 backend needs the CUDA 12 libs (libcublas.so.12,
+        # cuDNN 9).  Where those are present (cu12 libs on LD_LIBRARY_PATH) the GPU is
+        # used; otherwise ASR runs on CPU (int8).
         device = "cuda" if str(self.device).startswith("cuda") else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
         self.asr_model = faster_whisper.WhisperModel(
             str(self.whisper_model_id), device=device,
             compute_type=compute_type, download_root=MODEL_WEIGHTS_DIR,
         )
-        logger.info("faster-whisper loaded (%s, %s)", self.whisper_model_id, compute_type)
+        logger.info("faster-whisper loaded (%s, device=%s, %s)",
+                    self.whisper_model_id, device, compute_type)
 
     def _load_diarize_model(self):
+        # Diarization uses whisperx's pyannote wrapper.  The lean image does not
+        # ship whisperx (it would drag in an older transformers pin and break the
+        # transformers==5.9 that vllm-omni needs), so this degrades gracefully: if
+        # whisperx is unavailable, run single-speaker (SPEAKER_00) instead of
+        # crashing.  Install whisperx to enable real diarization.
         try:
-            from whisperx.diarize import DiarizationPipeline
-        except ImportError:
-            import whisperx
-            DiarizationPipeline = whisperx.DiarizationPipeline  # type: ignore[attr-defined]
+            try:
+                from whisperx.diarize import DiarizationPipeline
+            except ImportError:
+                import whisperx
+                DiarizationPipeline = whisperx.DiarizationPipeline  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.warning("whisperx unavailable (%s); diarization disabled, "
+                           "running single-speaker.", e)
+            self.diarize_model = None
+            return
         cwd = Path.cwd().resolve()
         os.chdir(Path(self.model_path_diarization).parent.parent.resolve())
         self.diarize_model = DiarizationPipeline(
             self.model_path_diarization, device=self.device)
         os.chdir(cwd)
 
+    @staticmethod
+    def _load_audio_16k(source_file: str):
+        """Load an audio file as 16 kHz mono float32 (via torchaudio, no whisperx)."""
+        import numpy as np
+        import torchaudio
+        wav, sr = torchaudio.load(source_file)  # (channels, samples)
+        if wav.shape[0] > 1:
+            wav = wav.mean(dim=0, keepdim=True)
+        if sr != 16000:
+            wav = torchaudio.functional.resample(wav, sr, 16000)
+        return wav.squeeze(0).contiguous().numpy().astype(np.float32)
+
     def transcribe(self, source_file: str, num_speakers=None) -> Output:
         import numpy as np
         import torch
-        import whisperx
 
-        audio = whisperx.load_audio(source_file)  # 16 kHz mono float32
+        audio = self._load_audio_16k(source_file)  # 16 kHz mono float32
 
         # 1. Transcribe with word timestamps.
         segments_gen, info = self.asr_model.transcribe(
@@ -207,10 +227,16 @@ class VADWhisperASR:
         transcript_result = {"segments": [
             {"text": " ".join(w["word"] for w in words), "start": 0.0,
              "end": audio_end, "words": words}]}
+        diarized = False
         if not self.skip_diarization and self.diarize_model is not None:
-            diarize_df = self.diarize_model(audio, num_speakers=num_speakers)
-            transcript_result = whisperx.assign_word_speakers(diarize_df, transcript_result)
-        else:
+            try:
+                import whisperx
+                diarize_df = self.diarize_model(audio, num_speakers=num_speakers)
+                transcript_result = whisperx.assign_word_speakers(diarize_df, transcript_result)
+                diarized = True
+            except Exception as e:
+                logger.warning("diarization failed (%s); single-speaker fallback", e)
+        if not diarized:
             for w in words:
                 w["speaker"] = "SPEAKER_00"
 

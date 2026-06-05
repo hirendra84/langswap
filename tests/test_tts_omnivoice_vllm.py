@@ -62,11 +62,6 @@ def _load_omnivoice_module(monkeypatch):
     tqdm_auto_module = types.ModuleType("tqdm.auto")
     tqdm_auto_module.tqdm = lambda iterable=None, **kwargs: iterable
     langswap_module = types.ModuleType("langswap")
-    model_config_module = types.ModuleType("langswap.model_config")
-    model_config_module.resolve_model = (
-        lambda env_var, default_repo_id, explicit=None: explicit or default_repo_id
-    )
-    model_config_module.MODEL_WEIGHTS_DIR = "fake-weights"
     utils_module = types.ModuleType("langswap.utils")
     ml_processing_module = types.ModuleType("langswap.utils.ml_processing")
     mapper_module = types.ModuleType("langswap.utils.ml_processing.lang2code_mapper")
@@ -75,7 +70,6 @@ def _load_omnivoice_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "tqdm", tqdm_module)
     monkeypatch.setitem(sys.modules, "tqdm.auto", tqdm_auto_module)
     monkeypatch.setitem(sys.modules, "langswap", langswap_module)
-    monkeypatch.setitem(sys.modules, "langswap.model_config", model_config_module)
     monkeypatch.setitem(sys.modules, "langswap.utils", utils_module)
     monkeypatch.setitem(sys.modules, "langswap.utils.ml_processing", ml_processing_module)
     monkeypatch.setitem(sys.modules, "langswap.utils.ml_processing.lang2code_mapper", mapper_module)
@@ -93,7 +87,6 @@ def test_omnivoice_vllm_generate_audio_builds_prompt(monkeypatch, tmp_path):
     captured, fake_sampling_params_cls = _install_fake_vllm_omni(monkeypatch)
 
     module = _load_omnivoice_module(monkeypatch)
-    monkeypatch.setattr(module, "resolve_model", lambda *a, **k: str(tmp_path / "OmniVoice"))
 
     reference_audio_path = tmp_path / "reference.wav"
     reference_audio = np.stack(
@@ -146,7 +139,6 @@ def test_omnivoice_vllm_auto_voice_omits_reference_audio(monkeypatch, tmp_path):
     captured, _ = _install_fake_vllm_omni(monkeypatch)
 
     module = _load_omnivoice_module(monkeypatch)
-    monkeypatch.setattr(module, "resolve_model", lambda *a, **k: str(tmp_path / "OmniVoice"))
 
     output_path = tmp_path / "auto.wav"
     client = module.OmniVoiceClient()

@@ -80,9 +80,7 @@ def process_translation(input, progress_callback=None):
     with timed("download_input"):
         file_path = get_file(repo, input.get("s3_video_url"))
     
-    tts_engine = input.get("tts_engine", "chatterbox")
-    if input.get('source_language') == "english" and input.get("target_language") == "russian" and input.get("tts_engine") == "xtts":
-        tts_engine = "f5tts"
+    tts_engine = input.get("tts_engine", "omnivoice")
 
     config = TranslationPipelineConfig(
         source_lang=input.get('source_language', None),
@@ -93,10 +91,8 @@ def process_translation(input, progress_callback=None):
         source_video_path=file_path,
         base_dir=BASE_DIR,
         device='cuda',
-        voice_conv=False,
         tts_model=tts_engine,
         dubbing_algo=input.get("dubbing_algo", "speedup"),
-        eleven_api_token=input.get("token"),
         watermark=input.get("watermark", True),
         skip_diarization=input.get("skip_diarization", False),
         # Default to the VAD backend: faster-whisper + Silero VAD segmentation,
@@ -105,7 +101,7 @@ def process_translation(input, progress_callback=None):
         # per-job with "asr_backend" ("qwen_onnx" / "qwen" / "whisperx") when a
         # forced aligner or the larger ASR is needed (e.g. proper-noun accuracy).
         asr_backend=input.get("asr_backend", "vad"),
-        translation_backend=input.get("translation_backend", "local"),
+        translation_backend=input.get("translation_backend", "llamacpp"),
     )
     
     with timed("pipeline_init"):
