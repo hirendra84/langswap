@@ -86,10 +86,13 @@ dev = [
 ]
 
 # ── uv wheel-index wiring ─────────────────────────────────────────────────────
-# torch/torchaudio/torchcodec for the gpu extra come from the CUDA 13 wheel index;
-# llama-cpp-python uses its prebuilt CPU wheel (no nvcc/compile, and leaves the GPU
-# to OmniVoice). The api extra's torch resolves from PyPI (CPU/MPS). The conflict
-# declaration lets uv keep both torch sources straight.
+# torch/torchaudio/torchcodec for the gpu extra come from the CUDA 13 wheel index.
+# llama-cpp-python comes from its prebuilt CUDA (cu124) wheel so n_gpu_layers=-1
+# actually offloads to the GPU: Gemma-4-E2B + the isochrony loop runs many short
+# generations per line, which is ~600x too slow on the CPU build (the cu124 wheel
+# bundles its own CUDA runtime and coexists with the cu130 torch stack). The api
+# extra's torch resolves from PyPI (CPU/MPS). The conflict declaration lets uv keep
+# the two torch sources straight.
 [tool.uv]
 conflicts = [[{ extra = "api" }, { extra = "gpu" }]]
 
@@ -99,15 +102,15 @@ url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [[tool.uv.index]]
-name = "llama-cpp-cpu"
-url = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+name = "llama-cpp-cu124"
+url = "https://abetlen.github.io/llama-cpp-python/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu130", extra = "gpu" }]
 torchaudio = [{ index = "pytorch-cu130", extra = "gpu" }]
 torchcodec = [{ index = "pytorch-cu130", extra = "gpu" }]
-llama-cpp-python = { index = "llama-cpp-cpu" }
+llama-cpp-python = { index = "llama-cpp-cu124" }
 
 [tool.setuptools.dynamic]
 version = {file = "langswap/__VERSION__"}

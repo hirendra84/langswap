@@ -81,7 +81,10 @@ def translate_video(
     device: str,
     skip_diarization: bool,
     eleven_api_token: Optional[str],
-    progress: gr.Progress = gr.Progress(track_tqdm=True),
+    # track_tqdm=False: show only our explicit stage progress below, not every
+    # library's internal tqdm (huggingface_hub's cache-check bars would otherwise
+    # surface as confusing "Downloading 0/0 B" bars that aren't real downloads).
+    progress: gr.Progress = gr.Progress(track_tqdm=False),
 ):
     """Gradio callback: run the full pipeline and return outputs.
 

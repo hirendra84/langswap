@@ -132,7 +132,7 @@ docker build -t langswap/video-translation-pipeline:4.0-base .
 
 - **Default backends** — each stage is local-by-default with an API fallback for no-GPU machines:
   - ASR: `vad` (local) — faster-whisper large-v3 + Silero VAD segmentation, no forced aligner, no per-language model. API fallback: `openai` (Whisper API). Chosen over Qwen-ASR after benchmarking: equal boundary accuracy, far lower weight.
-  - Translation: `llamacpp` (local) — Gemma-4-12B-IT GGUF (`unsloth/gemma-4-12b-it-GGUF`) via llama-cpp-python; offloads to GPU when `device` is cuda, else CPU. A GGUF in-process engine avoids running a second vLLM alongside OmniVoice. API fallback: `openai`.
+  - Translation: `llamacpp` (local) — Gemma-4-E2B-IT GGUF (`unsloth/gemma-4-E2B-it-GGUF`) via llama-cpp-python, offloaded to GPU on cuda else CPU. A small/fast model whose loose single-shot length match is tightened by a Python isochrony loop (generate → measure spoken length → re-prompt longer/shorter, forgiving thresholds, flat per-retry context). A GGUF in-process engine avoids running a second vLLM alongside OmniVoice. API fallback: `openai`.
   - TTS: `omnivoice` (local) — OmniVoice via vllm-omni. API fallback: `elevenlabs`.
 
 - **File repository** — every artifact (downloaded video, intermediate audio, SRT, result) round-trips through a `FileRepository` (`langswap/file_repository/`). `get_file(name)` returns a handle inside the job dir `data/<public_id>/`; `save_file()` persists it. `RemoteFileRepository` syncs to S3 (Yandex Cloud endpoint); `LocalOnlyFileRepository` stays on disk (`file://` URLs) and is what the CLI/Gradio use.

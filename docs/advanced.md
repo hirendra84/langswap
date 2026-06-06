@@ -4,7 +4,7 @@ Detailed reference for running langswap from source, the model registry, all
 environment variables, Docker build notes, and troubleshooting.
 For the quick path see the [README](../README.md).
 
-The pipeline: **ASR** (faster-whisper large-v3 + Silero VAD) → **translation** (Gemma-4-12B) →
+The pipeline: **ASR** (faster-whisper large-v3 + Silero VAD) → **translation** (Gemma-4-E2B) →
 **TTS** (OmniVoice) → **dubbing/merge** → muxed video + SRT subtitles.
 It runs entirely on a local machine (no S3/AWS required).
 
@@ -70,7 +70,7 @@ builds self-contained. Set `HF_TOKEN` for the gated models.
 |------------------|--------------------------------------------------------------------|---------|----------------------------|
 | faster-whisper   | `large-v3`                                                         | No      | ASR `vad` (default)        |
 | Silero VAD       | `silero-vad` (bundled, ~1.4 MB)                                    | No      | ASR `vad` segmentation     |
-| Gemma-4-12B GGUF | `unsloth/gemma-4-12b-it-GGUF` / `gemma-4-12b-it-UD-Q4_K_XL.gguf`   | No      | translation `llamacpp` (default) |
+| Gemma-4-E2B GGUF | `unsloth/gemma-4-E2B-it-GGUF` / `gemma-4-E2B-it-UD-Q4_K_XL.gguf`   | No      | translation `llamacpp` (default) |
 | OmniVoice        | `k2-fsa/OmniVoice`                                                 | No      | TTS `omnivoice` (default)  |
 | pyannote         | `pyannote/speaker-diarization-3.1`                                | **Yes** | diarization (optional)     |
 
@@ -97,7 +97,7 @@ Useful flags:
 |-----------------------|-------------|-------------------------------------------------------------|
 | `--device`            | `auto`      | `auto` / `cuda` / `mps` / `cpu`                             |
 | `--asr`               | `vad`       | `vad` (faster-whisper + Silero VAD) / `openai` (Whisper API) |
-| `--translation`       | `llamacpp`  | `llamacpp` (Gemma-4-12B GGUF) / `openai`                   |
+| `--translation`       | `llamacpp`  | `llamacpp` (Gemma-4-E2B GGUF) / `openai`                   |
 | `--tts`               | `omnivoice` | `omnivoice` / `elevenlabs`                                 |
 | `--dubbing`           | `speedup`   | `speedup` / `stretch_whole` / `pause_based`                |
 | `--with-diarization`  | off         | enable speaker diarization (needs pyannote weights + token) |
@@ -127,7 +127,7 @@ Other flags: `--host`, `--port`, `--share`, `--data-dir`.
 
 The single [`Dockerfile`](../Dockerfile) builds the whole pipeline into one image on
 `transformers==5.9.0` + `vllm==0.21.0` (the pair vllm-omni's voice cloning requires). The default
-path is `vad` ASR (faster-whisper large-v3 + Silero VAD) + Gemma-4-12B GGUF translation + OmniVoice
+path is `vad` ASR (faster-whisper large-v3 + Silero VAD) + Gemma-4-E2B GGUF translation + OmniVoice
 TTS, all in-process — no separate ASR/TTS service.
 
 - Built on `ubuntu24.04` (Python 3.12 is native there; 22.04 only ships 3.10).
@@ -197,7 +197,7 @@ of which restrict commercial or derivative use:
 
 | Component | Model | License |
 | --- | --- | --- |
-| Translation | Gemma-4-12B-IT (Google **Gemma**, `unsloth` GGUF) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) — *use restrictions apply; not OSI-approved* |
+| Translation | Gemma-4-E2B-IT (Google **Gemma**, `unsloth` GGUF) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) — *use restrictions apply; not OSI-approved* |
 | ASR | faster-whisper `large-v3` (OpenAI Whisper) + Silero VAD | Whisper [MIT](https://github.com/openai/whisper/blob/main/LICENSE); Silero VAD [MIT](https://github.com/snakers4/silero-vad/blob/master/LICENSE) |
 | TTS | `k2-fsa/OmniVoice` | See the model's Hugging Face model card |
 | ElevenLabs / OpenAI backends | Hosted APIs | Provider commercial Terms of Service |

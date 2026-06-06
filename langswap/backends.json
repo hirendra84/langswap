@@ -9,7 +9,7 @@
   "translation": {
     "default": "llamacpp",
     "options": {
-      "llamacpp": {"label": "Gemma-4-12B GGUF (local)", "requires_gpu": false, "requires_api_key": null},
+      "llamacpp": {"label": "Gemma-4-E2B GGUF (local)", "requires_gpu": false, "requires_api_key": null},
       "openai":   {"label": "OpenAI (API)",             "requires_gpu": false, "requires_api_key": "OPENAI_API_KEY"}
     }
   },

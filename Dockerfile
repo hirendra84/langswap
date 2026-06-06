@@ -45,10 +45,12 @@ WORKDIR /app
 
 # Single source of truth for dependencies: pyproject.toml + uv. The ".[gpu]"
 # extra pulls the whole local stack — torch/torchaudio/torchcodec from the CUDA 13
-# index and llama-cpp-python from its prebuilt CPU wheel (both wired in
-# pyproject's [tool.uv]); transformers/vllm/vllm-omni (OmniVoice), faster-whisper
-# (VAD ASR), silero-vad, and the qwen-omni-utils OmniVoice runtime helper. The
-# "runpod" extra adds the serverless worker SDK (serverless.py).
+# index and llama-cpp-python from its prebuilt CUDA (cu124) wheel so Gemma-4-E2B
+# translation offloads to the GPU (the CPU build is far too slow for the per-line
+# isochrony loop); both indexes are wired in pyproject's [tool.uv]. Also
+# transformers/vllm/vllm-omni (OmniVoice), faster-whisper (VAD ASR), silero-vad,
+# and the qwen-omni-utils OmniVoice runtime helper. The "runpod" extra adds the
+# serverless worker SDK (serverless.py).
 #
 # nvidia-cublas-cu12 (in the gpu extra): this is a CUDA-13 image (cu130 torch/
 # vLLM/OmniVoice), but ctranslate2 (faster-whisper's backend) links cuBLAS *12*
@@ -68,7 +70,7 @@ RUN uv pip install pip setuptools wheel --system
 RUN uv pip install -e ".[gpu,runpod]" --system
 
 # MODEL_WEIGHTS_DIR should be a mounted volume holding the model weights (OmniVoice,
-# faster-whisper large-v3, the Gemma-4-12B GGUF under gemma-4-12b-it-GGUF/, pyannote
+# faster-whisper large-v3, the Gemma-4-E2B GGUF under gemma-4-E2B-it-GGUF/, pyannote
 # configs).  Anything absent is auto-downloaded into it on first use.
 ENV MODEL_WEIGHTS_DIR=/app/models_weights \
     LANGSWAP_DATA_DIR=/app/data

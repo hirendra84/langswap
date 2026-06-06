@@ -194,11 +194,13 @@ class SpeechToTextManager:
         """
         ffmpeg_client = FFmpegClient()
         output_file = self._file_repository.get_file(audio_file_name)
-        out, err = ffmpeg_client.extract_audio(video_file_path,
-                                               output_file.file_path,
-                                               time_limit=60)
-        logger.info(out)
-        logger.error(err)
+        # extract_audio raises if ffmpeg produced no output, so reaching here means
+        # success; only surface ffmpeg's stderr when it actually wrote something.
+        _out, err = ffmpeg_client.extract_audio(video_file_path,
+                                                output_file.file_path,
+                                                time_limit=60)
+        if err:
+            logger.debug("ffmpeg extract_audio stderr: %s", err)
 
         return output_file
 

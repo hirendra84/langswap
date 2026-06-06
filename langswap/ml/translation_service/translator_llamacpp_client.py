@@ -1,14 +1,18 @@
-"""Plain-Gemma-4 translation client backed by llama-cpp-python + a GGUF model.
+"""Gemma-4-E2B translation client backed by llama-cpp-python + a GGUF model.
 
-Why this is the default translation backend: the dubbing image already carries
-vLLM (OmniVoice's vllm-omni needs it).  Running translation through a *second*
-vLLM engine would double the CUDA-graph/compile cost and split GPU memory with
-OmniVoice (gpu_memory_utilization 0.6 + 0.5 > 1.0 → OOM risk).  llama-cpp-python
-is a tiny in-process API that loads a Q4 GGUF in a few seconds, runs Gemma-4-12B
-reliably, and offloads to the GPU when one is available.
+Why E2B + an isochrony loop: the dubbing image already carries vLLM (OmniVoice
+needs it); a second vLLM engine for translation would split GPU memory and risk
+OOM. llama-cpp-python loads a small Q4 GGUF in ~2 s and runs in-process. Gemma-4
+E2B (~2B effective) is fast and clean but its single-shot length match is loose
+(isochrony ~0.91). A short Python length-feedback loop — generate, measure
+spoken length, re-prompt longer/shorter — tightens the match (~3-4x lower error)
+for a few cents of extra latency, which matters because the downstream dub retimes
+to the source segment duration.
 
-Plain Gemma-4-12B (instruction-tuned), NOT TranslateGemma — uses the model's own
-chat template via create_chat_completion.
+Vision encoder: we load ONLY the text GGUF. Gemma-4's vision tower lives in a
+separate `mmproj` file that we never pass and llama.cpp never instantiates, so
+the multimodal encoder is absent from the process — exactly what we want for a
+text-only translation task.
 
 Interface matches the other translator clients: load_models() + translate().
 """
@@ -16,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import unicodedata
 from typing import List, Optional
 
 from langswap.model_config import MODEL_WEIGHTS_DIR
@@ -23,9 +28,20 @@ from langswap.utils.ml_processing.lang2code_mapper import map_language_to_code
 
 logger = logging.getLogger(__name__)
 
-# A plain gemma-4-12b-it GGUF that llama.cpp loads directly.
-_GGUF_REPO = "unsloth/gemma-4-12b-it-GGUF"
-_GGUF_FILE = "gemma-4-12b-it-UD-Q4_K_XL.gguf"
+# Gemma-4-E2B instruction-tuned GGUF (Unsloth Dynamic 4-bit, ~3.2 GB), text-only.
+_GGUF_REPO = "unsloth/gemma-4-E2B-it-GGUF"
+_GGUF_FILE = "gemma-4-E2B-it-UD-Q4_K_XL.gguf"
+_GGUF_DIR = "gemma-4-E2B-it-GGUF"
+
+# Isochrony loop, intentionally forgiving: stop as soon as the spoken length is
+# within +-15% of the source, and never iterate more than a couple of times — the
+# point is a rough timing match, not to bully the model into padding/truncating
+# (which costs meaning, see the guard in _translate_one).
+_ISO_TOL = 0.15
+_ISO_MAX_ITERS = 2
+
+# Vowels used as a syllable proxy for alphabetic scripts (Latin + Cyrillic).
+_VOWELS = set("aeiouy") | set("аеёиоуыэюя")
 
 
 def _lang_name(lang: str) -> str:
@@ -41,11 +57,36 @@ def _lang_name(lang: str) -> str:
     return l.capitalize()
 
 
+def _spoken_length(text: str) -> int:
+    """Rough spoken-length (syllable) proxy used to drive the isochrony loop.
+
+    Counts vowels for alphabetic scripts (diacritics folded via NFKD so é→e);
+    falls back to CJK/Kana/Hangul code points (~1 syllable each), then to the
+    non-space character count. Always >= 1.
+    """
+    folded = "".join(
+        c for c in unicodedata.normalize("NFKD", text.lower())
+        if not unicodedata.combining(c)
+    )
+    n = sum(c in _VOWELS for c in folded)
+    if n:
+        return n
+    n = sum(
+        1 for c in text
+        if (0x3040 <= ord(c) <= 0x30FF)   # Hiragana/Katakana
+        or (0x3400 <= ord(c) <= 0x9FFF)   # CJK ideographs
+        or (0xAC00 <= ord(c) <= 0xD7A3)   # Hangul syllables
+    )
+    if n:
+        return n
+    return max(1, len(text.replace(" ", "")))
+
+
 def _ensure_gguf(model_path: Optional[str]) -> str:
-    """Resolve the gemma-4 GGUF path from MODEL_WEIGHTS_DIR; download on first use."""
+    """Resolve the GGUF path from MODEL_WEIGHTS_DIR; download on first use."""
     if model_path and os.path.exists(model_path):
         return model_path
-    local_dir = os.path.join(MODEL_WEIGHTS_DIR, "gemma-4-12b-it-GGUF")
+    local_dir = os.path.join(MODEL_WEIGHTS_DIR, _GGUF_DIR)
     candidate = os.path.join(local_dir, _GGUF_FILE)
     if os.path.exists(candidate):
         return candidate
@@ -59,7 +100,7 @@ def _ensure_gguf(model_path: Optional[str]) -> str:
 
 
 class LlamaCppTranslationClient:
-    """Gemma-4-12B translation via llama-cpp-python + GGUF."""
+    """Gemma-4-E2B translation via llama-cpp-python, with an isochrony loop."""
 
     def __init__(self, device: str = "cuda", model_path: Optional[str] = None):
         self.device = device
@@ -77,12 +118,13 @@ class LlamaCppTranslationClient:
                 "Install with: pip install llama-cpp-python"
             ) from e
 
-        # n_gpu_layers: -1 offloads the whole model to GPU when on cuda; 0 keeps
-        # it on CPU otherwise.
+        # -1 offloads the whole model to GPU on cuda; 0 keeps it on CPU otherwise.
+        # Only the text GGUF is loaded (no mmproj) so the vision encoder is never
+        # instantiated.
         n_gpu_layers = -1 if self.device.startswith("cuda") else 0
         n_threads = os.cpu_count() or 8
 
-        logger.info("Loading gemma-4-12b GGUF via llama.cpp: %s (n_gpu_layers=%s)",
+        logger.info("Loading gemma-4-E2B GGUF via llama.cpp: %s (n_gpu_layers=%s)",
                     self.model_path, n_gpu_layers)
         self._llm = Llama(
             model_path=self.model_path,
@@ -93,12 +135,58 @@ class LlamaCppTranslationClient:
             verbose=False,
         )
 
+    def _generate(self, user_content: str) -> str:
+        """One no-think translation turn (default template => empty thought channel)."""
+        out = self._llm.create_chat_completion(
+            messages=[{"role": "user", "content": user_content}],
+            temperature=0.0
+        )
+        return (out["choices"][0]["message"]["content"] or "").strip()
+
+    def _translate_one(self, text: str, src: str, tgt: str) -> str:
+        system = (
+            f"You are a professional dubbing translator. Translate the line from "
+            f"{src} to {tgt}. Output ONLY the {tgt} translation — no notes, "
+            f"explanations, quotes, or alternatives. Keep it natural for spoken "
+            f"dubbing and close in spoken length to the original."
+        )
+        target_len = _spoken_length(text)
+
+        out = self._generate(f"{system}\n\nLine: {text}")
+        # Track every attempt (incl. the clean single-shot) and ultimately return
+        # the one whose spoken length is closest to the source — this is the guard
+        # against length pressure degrading meaning: a worse-length retry is dropped.
+        best, best_err = out, abs(_spoken_length(out) / target_len - 1.0)
+
+        for _ in range(_ISO_MAX_ITERS):
+            cur_len = _spoken_length(out)
+            ratio = cur_len / target_len
+            if 1 - _ISO_TOL <= ratio <= 1 + _ISO_TOL:
+                return out
+            longer = ratio < 1
+            # Flat re-prompt: only the LATEST attempt is carried into context, never
+            # the whole iteration history, so the prompt stays small no matter how
+            # many times we loop.
+            feedback = (
+                f"{system}\n\nLine: {text}\n\n"
+                f'Your previous {tgt} translation was: "{out}"\n'
+                f"It is {'too short' if longer else 'too long'} for dubbing "
+                f"(needs about {target_len} syllables, it has {cur_len}). Give a "
+                f"{'longer' if longer else 'shorter'} {tgt} translation with the "
+                f"same meaning. Output ONLY the translation."
+            )
+            out = self._generate(feedback)
+            err = abs(_spoken_length(out) / target_len - 1.0)
+            if err < best_err:
+                best, best_err = out, err
+
+        return best
+
     def translate(
         self,
         sentences: List[str],
         source_language: str,
         target_language: str,
-        max_new_tokens: int = 512,
     ) -> List[str]:
         if self._llm is None:
             raise RuntimeError("Call load_models() before translate().")
@@ -112,16 +200,6 @@ class LlamaCppTranslationClient:
             if not text:
                 results.append("")
                 continue
-            prompt = (
-                f"Translate the following text from {src} to {tgt}. "
-                f"Preserve meaning and tone. Respond with ONLY the translation, "
-                f"no quotes, no notes, no explanations.\n\n{text}"
-            )
-            out = self._llm.create_chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=max_new_tokens,
-            )
-            results.append((out["choices"][0]["message"]["content"] or "").strip())
+            results.append(self._translate_one(text, src, tgt))
         logger.info("llama.cpp translated %d sentences (%s → %s)", len(sentences), src, tgt)
         return results
