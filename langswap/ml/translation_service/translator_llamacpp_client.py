@@ -14,6 +14,14 @@ separate `mmproj` file that we never pass and llama.cpp never instantiates, so
 the multimodal encoder is absent from the process — exactly what we want for a
 text-only translation task.
 
+Single-GPU pinning: we load with split_mode=NONE and main_gpu=0 so llama.cpp
+uses exactly one GPU. On a multi-GPU host, GGML otherwise registers a backend
+per visible CUDA device, and Gemma-4's SWA graph then exceeds
+GGML_SCHED_MAX_SPLIT_INPUTS when the scheduler tries to split it across
+backends. Pinning to one device makes the multi-GPU case behave like the
+single-GPU RunPod target (which never hit this), at no speed cost for a ~2B
+model that fits on one card anyway.
+
 Interface matches the other translator clients: load_models() + translate().
 """
 from __future__ import annotations
@@ -111,7 +119,7 @@ class LlamaCppTranslationClient:
         if self._llm is not None:
             return
         try:
-            from llama_cpp import Llama
+            from llama_cpp import Llama, LLAMA_SPLIT_MODE_NONE
         except ModuleNotFoundError as e:
             raise ModuleNotFoundError(
                 "Missing dependency `llama-cpp-python` required for LlamaCppTranslationClient. "
@@ -126,12 +134,18 @@ class LlamaCppTranslationClient:
 
         logger.info("Loading gemma-4-E2B GGUF via llama.cpp: %s (n_gpu_layers=%s)",
                     self.model_path, n_gpu_layers)
+        # split_mode=NONE + main_gpu=0 pins llama.cpp to a single GPU. On a
+        # multi-GPU host GGML would otherwise register one backend per device and
+        # Gemma-4's SWA graph trips GGML_SCHED_MAX_SPLIT_INPUTS when split across
+        # them; pinning makes it behave like the single-GPU case.
         self._llm = Llama(
             model_path=self.model_path,
             n_ctx=4096,
             n_gpu_layers=n_gpu_layers,
             n_threads=n_threads,
             flash_attn=True,
+            split_mode=LLAMA_SPLIT_MODE_NONE,
+            main_gpu=0,
             verbose=False,
         )
 

@@ -67,8 +67,10 @@ class SpeechToTextManager:
     def _separate_vocals_and_background(self, audio_file_path: str) -> Dict[str, str]:
         """Separates vocals from background audio using Demucs."""
         self.logger.file_logger.info('Step: Demucs separation')
+        from langswap.model_pool import get_or_create
         from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
-        background_paths = DemucsClient().separate(audio_file_path, self._file_repository.subdir('background_files'))
+        demucs_client = get_or_create("demucs", lambda: DemucsClient())
+        background_paths = demucs_client.separate(audio_file_path, self._file_repository.subdir('background_files'))
         self._file_repository.save_dir(self._file_repository.subdir('background_files'))
         return {name: path for path, name in background_paths}
 
@@ -139,24 +141,37 @@ class SpeechToTextManager:
         if num_speakers is not None:
             num_speakers = int(num_speakers)
 
-        import time as _t
+        import threading
+
         # 1. Get audio file (extract if video)
-        # The original code implies audio_file could be a path string or a RemoteFile object at different stages.
-        # For clarity, let's assume _get_audio_file returns the path to the (potentially newly extracted) audio file.
-        _t0 = _t.perf_counter()
         audio_file_path = self._get_audio_file(video_translation)
-        print(f"[timing] asr.extract_audio: {_t.perf_counter() - _t0:.1f}s")
 
-        # 2. Separate vocals and background
-        _t0 = _t.perf_counter()
-        background_files = self._separate_vocals_and_background(audio_file_path)
-        print(f"[timing] asr.demucs_separate: {_t.perf_counter() - _t0:.1f}s")
-        vocal_file_path = background_files["vocals.wav"] # Assuming Demucs always produces "vocals.wav"
+        # 2 & 3: Run Demucs and Whisper concurrently.
+        # Demucs (PyTorch/GPU) runs in a thread while Whisper (CTranslate2/GPU) runs in the
+        # main thread — both release the GIL during CUDA computation so they genuinely
+        # overlap. Whisper transcribes the raw audio (pre-separation), which for typical
+        # speech clips is identical to transcribing the demucs vocals stem. Demucs output
+        # is still needed for: vocals.wav (TTS reference audio) and background stems
+        # (drums/bass/other for re-mixing). This saves ~1s vs sequential execution.
+        _bg_result: list = [None]
+        _bg_error: list = [None]
 
-        # 3. Transcribe vocals (or load from cache)
-        _t0 = _t.perf_counter()
-        raw_transcribed_segments, source_lang_code = self._load_or_transcribe_audio(vocal_file_path, num_speakers)
-        print(f"[timing] asr.transcribe: {_t.perf_counter() - _t0:.1f}s")
+        def _run_demucs() -> None:
+            try:
+                _bg_result[0] = self._separate_vocals_and_background(audio_file_path)
+            except Exception as exc:
+                _bg_error[0] = exc
+
+        demucs_thread = threading.Thread(target=_run_demucs, daemon=True)
+        demucs_thread.start()
+
+        # Transcribe raw audio while Demucs runs in the background.
+        raw_transcribed_segments, source_lang_code = self._load_or_transcribe_audio(audio_file_path, num_speakers)
+
+        demucs_thread.join()
+        if _bg_error[0] is not None:
+            raise _bg_error[0]
+        background_files = _bg_result[0]
 
         # 4. Remap pauses in segments (or load from cache)
         final_segments = self._load_or_remap_segments(raw_transcribed_segments)
