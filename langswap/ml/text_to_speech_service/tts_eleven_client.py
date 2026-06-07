@@ -1,8 +1,6 @@
 import os
 import types
 
-from elevenlabs import save
-from elevenlabs.client import ElevenLabs
 from tqdm import tqdm
 
 from langswap.pipeline_models.models import TranslatedTextedSegment
@@ -10,8 +8,13 @@ from langswap.pipeline_models.models import TranslatedTextedSegment
 
 class ElevenTTSClient:
 
-    def __init__(self, eleven_api_token):
-        self.client = ElevenLabs(api_key=eleven_api_token)
+    def __init__(self):
+        from elevenlabs.client import ElevenLabs
+
+        api_key = os.environ.get("ELEVEN_API_KEY")
+        if not api_key:
+            raise EnvironmentError("ELEVEN_API_KEY env var is not set.")
+        self.client = ElevenLabs(api_key=api_key)
         self.sample_rate = 24000
         # If ELEVEN_VOICE_ID is set, skip cloning and use this voice directly.
         self._preset_voice_id = os.environ.get("ELEVEN_VOICE_ID")
@@ -54,6 +57,8 @@ class ElevenTTSClient:
         return voice, True
 
     def generate_audio(self, text: str, voice, save_path: str, source_text=None):
+        from elevenlabs import save
+
         try:
             audio = self.client.text_to_speech.convert(
                 voice_id=voice.voice_id,

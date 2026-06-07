@@ -41,7 +41,6 @@ class VideoTranslationPipeline:
         self.audio_extensions = ["mp3", "wav"]
    
     def _generate_asr(self):
-        print("initializing ASR manager")
         stt_manager = SpeechToTextManager(
             language=self.config.source_lang,
             public_id=self.config.public_id,
@@ -49,9 +48,8 @@ class VideoTranslationPipeline:
             device=self.config.device,
             logger=self.logger,
             skip_diarization=getattr(self.config, 'skip_diarization', False),
-            backend=getattr(self.config, 'asr_backend', 'qwen'),
+            backend=getattr(self.config, 'asr_backend', 'vad'),
         )
-        print(f"Transcribing audio file: {self.video_translation.source_file.file_path} with language: {self.config.source_lang}")
         self.video_translation = stt_manager.extract_and_transcribe(self.video_translation, num_speakers=self.config.num_speakers)
         if self.config.source_lang != None:
             self.config.source_lang = map_language_to_code(self.video_translation.source_lang_code, system="reverse_from_whisper")
@@ -63,24 +61,20 @@ class VideoTranslationPipeline:
                                                self._file_repository,
                                                device=self.config.device,
                                                logger=self.logger,
-                                               backend=getattr(self.config, 'translation_backend', 'local'))
+                                               backend=getattr(self.config, 'translation_backend', 'llamacpp'))
         self.video_translation = translate_manager.translate(self.video_translation, source_lang=self.config.source_lang, target_lang=self.config.target_lang)
 
     def _generate_speech(self):
         torch.cuda.empty_cache()
-        tts_manager = TextToSpeechManager(self.config.public_id, 
-                                          self._file_repository, 
-                                          device=self.config.device, 
+        tts_manager = TextToSpeechManager(self.config.public_id,
+                                          self._file_repository,
+                                          device=self.config.device,
                                           tts_name = self.config.tts_model,
-                                          logger=self.logger, 
-                                          tts_sample_rate=44100, 
-                                          eleven_api_token=self.config.eleven_api_token)
-        self.video_translation = tts_manager.synthesize(self.video_translation, 
-                                                        source_lang=self.config.source_lang, 
-                                                        target_lang=self.config.target_lang, 
-                                                        voice_conv=self.config.voice_conv, 
-                                                        enhance=False
-                                                        )
+                                          logger=self.logger,
+                                          tts_sample_rate=44100)
+        self.video_translation = tts_manager.synthesize(self.video_translation,
+                                                        source_lang=self.config.source_lang,
+                                                        target_lang=self.config.target_lang)
     
     def _merge(self, merge_pipeline="stretch_whole"):
         video_dubbing_manager = VideoDubbingManager(self._file_repository, self.logger)
@@ -120,7 +114,9 @@ class VideoTranslationPipeline:
 
         self.logger.file_logger.info("Step: merge backgrounds back")
         from langswap.ml.text_to_speech_service.demucs_client import DemucsClient
-        merged_background_audio, save_sr = DemucsClient().merge_background(
+        # merge_background only mixes already-separated stems; it never runs the
+        # separator, so skip loading the (multi-second) Demucs model here.
+        merged_background_audio, save_sr = DemucsClient(load_separator=False).merge_background(
                     styled_audio.file_path,
                     audio_backgrounds,
         )
@@ -140,7 +136,11 @@ class VideoTranslationPipeline:
                                         result_audio.file_path,
                                         resulted_video.file_path,
                                         )
-            self._file_repository.save_file(resulted_video)
+            # When a watermark follows, it rewrites this file and re-uploads it
+            # below, so uploading here would push the same (large) MP4 to S3
+            # twice.  Upload once: now if there's no watermark, after it if there is.
+            if not self.config.watermark:
+                self._file_repository.save_file(resulted_video)
 
         if self.config.watermark:
             self.logger.file_logger.info("Step: add watermark to the video")
@@ -235,10 +235,10 @@ class ChangeManager:
         json_segments = [{"translation": seg.translation, "text": seg.text} for seg in self.video_translation.translated_texts]
         self.video_translation_pipeline.logger.log_json(file_name="translations.json", data=json_segments)
         
-        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000)
+        tts_manager = TextToSpeechManager(self.video_translation_pipeline.config.public_id, self.video_translation_pipeline._file_repository, device=self.video_translation_pipeline.config.device, logger=self.video_translation_pipeline.logger, tts_sample_rate=24000, tts_name=self.video_translation_pipeline.config.tts_model)
         vocals_path = self.video_translation.background_audio["vocals.wav"]
         for update in updates:
-            tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], target_lang=self.video_translation_pipeline.config.target_lang, vocals_path=vocals_path, voice_conv=self.video_translation_pipeline.config.voice_conv)
+            tts_manager.synthesize_segment(self.video_translation.translated_texts[update.index], target_lang=self.video_translation_pipeline.config.target_lang, vocals_path=vocals_path)
         tts_manager.clear_result_video(self.video_translation_pipeline._file_repository.directory + "/resulted_video.mp4")
         
         self.video_translation = self.video_translation_pipeline._merge(self.video_translation_pipeline.config.dubbing_algo)

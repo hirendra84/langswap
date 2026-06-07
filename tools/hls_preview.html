@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>langswap — streaming dub preview</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0d0f14; color: #e6e6e6;
+         font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 16px; font-weight: 600; letter-spacing: .04em; }
+  video { width: 100%; background: #000; border-radius: 8px; }
+  .row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  input[type=text] { flex: 1; min-width: 280px; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid #2a2f3a; background: #151823; color: #e6e6e6; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid #2a2f3a;
+    background: #1b6ef3; color: #fff; cursor: pointer; }
+  button.secondary { background: #1b1f2a; }
+  #log { white-space: pre-wrap; background: #11141d; border: 1px solid #2a2f3a;
+    border-radius: 8px; padding: 12px; height: 220px; overflow: auto; margin-top: 12px; }
+  .stat { color: #8aa0c0; }
+  .seg { color: #6ad36a; }
+  .err { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>langswap — streaming dub preview (HLS EVENT / fMP4)</h1>
+  <div class="row">
+    <input id="url" type="text"
+           value="http://localhost:8000/index.m3u8"
+           placeholder="URL to index.m3u8" />
+    <button id="load">Load</button>
+    <button id="reload" class="secondary">Reload playlist</button>
+  </div>
+  <video id="v" controls playsinline></video>
+  <div class="row stat">
+    <span>TTFS (first segment appended): <b id="ttfs">—</b></span>
+    <span>segments: <b id="nseg">0</b></span>
+    <span>state: <b id="state">idle</b></span>
+  </div>
+  <div id="log"></div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+function log(msg, cls) {
+  const t = new Date().toISOString().substr(11, 12);
+  logEl.innerHTML += `<span class="${cls || ""}">[${t}] ${msg}</span>\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+let hls, t0, firstSegAt = null, segCount = 0;
+
+function start(url) {
+  if (hls) { hls.destroy(); hls = null; }
+  segCount = 0; firstSegAt = null; $("ttfs").textContent = "—"; $("nseg").textContent = "0";
+  t0 = performance.now();
+  const v = $("v");
+
+  if (window.Hls && Hls.isSupported()) {
+    // EVENT playlist that grows: keep reloading; low latency tolerant.
+    hls = new Hls({ lowLatencyMode: true, liveSyncDurationCount: 1, enableWorker: true });
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { log("manifest parsed", "stat"); v.play().catch(()=>{}); });
+    hls.on(Hls.Events.LEVEL_UPDATED, (_e, d) => {
+      const frags = d.details.fragments.length;
+      if (frags > segCount) {
+        for (let i = segCount; i < frags; i++) {
+          const f = d.details.fragments[i];
+          log(`segment ${i}: ${f.relurl} dur=${f.duration.toFixed(3)}s start=${f.start.toFixed(3)}s`, "seg");
+        }
+        segCount = frags; $("nseg").textContent = String(segCount);
+        if (firstSegAt === null) {
+          firstSegAt = (performance.now() - t0) / 1000;
+          $("ttfs").textContent = firstSegAt.toFixed(2) + "s";
+        }
+      }
+      $("state").textContent = d.details.live ? "live (growing)" : "ended (VOD)";
+    });
+    hls.on(Hls.Events.ERROR, (_e, d) => {
+      log(`error: ${d.type}/${d.details}${d.fatal ? " FATAL" : ""}`, "err");
+    });
+    hls.loadSource(url);
+    hls.attachMedia(v);
+  } else if (v.canPlayType("application/vnd.apple.mpegurl")) {
+    v.src = url;  // Safari native HLS
+    v.addEventListener("loadedmetadata", () => v.play().catch(()=>{}));
+    log("using native HLS (Safari)", "stat");
+  } else {
+    log("HLS not supported in this browser", "err");
+  }
+}
+
+$("load").onclick = () => start($("url").value.trim());
+$("reload").onclick = () => { if (hls) hls.loadSource($("url").value.trim()); };
+</script>
+</body>
+</html>

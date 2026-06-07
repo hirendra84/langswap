@@ -81,7 +81,10 @@ def translate_video(
     device: str,
     skip_diarization: bool,
     eleven_api_token: Optional[str],
-    progress: gr.Progress = gr.Progress(track_tqdm=True),
+    # track_tqdm=False: show only our explicit stage progress below, not every
+    # library's internal tqdm (huggingface_hub's cache-check bars would otherwise
+    # surface as confusing "Downloading 0/0 B" bars that aren't real downloads).
+    progress: gr.Progress = gr.Progress(track_tqdm=False),
 ):
     """Gradio callback: run the full pipeline and return outputs.
 
@@ -101,6 +104,11 @@ def translate_video(
         repo = LocalOnlyFileRepository(public_id, BASE_DIR)
         resolved_device = _resolve_device(device)
 
+        # ElevenLabs client reads ELEVEN_API_KEY from the environment; honor a
+        # token entered in the UI by exporting it for this process.
+        if eleven_api_token:
+            os.environ["ELEVEN_API_KEY"] = eleven_api_token
+
         progress(0.0, desc="Initializing pipeline")
 
         config = TranslationPipelineConfig(
@@ -112,10 +120,8 @@ def translate_video(
             source_video_path=str(video_path),
             base_dir=BASE_DIR,
             device=resolved_device,
-            voice_conv=False,
             tts_model=tts_engine,
             dubbing_algo=dubbing_algo,
-            eleven_api_token=(eleven_api_token or os.environ.get("ELEVEN_API_KEY") or None),
             watermark=False,
             skip_diarization=skip_diarization,
             asr_backend=asr_backend,
@@ -222,8 +228,6 @@ def build_ui() -> gr.Blocks:
             "### Tips\n"
             "- First run auto-downloads the model weights into `models_weights/` — "
             "this can take a long time and needs free disk space.\n"
-            "- Override model IDs via env vars: `LANGSWAP_QWEN_ASR_MODEL`, "
-            "`LANGSWAP_TRANSLATEGEMMA_MODEL`, `LANGSWAP_OMNIVOICE_MODEL`.\n"
             "- Intermediate artifacts are cached under `data/<id>/` — re-running on "
             "the same file skips ASR/translation if their JSON outputs already exist."
         )

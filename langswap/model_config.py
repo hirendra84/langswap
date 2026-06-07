@@ -1,14 +1,13 @@
 """
 Model Configuration
 
-Resolves the model weights/cache directory, points every model library at it,
-and provides a tiny helper for resolving model ids.  Models are loaded directly
-from HuggingFace and auto-downloaded on first use (no custom downloader layer).
+Resolves the model weights/cache directory and points every model library at it.
+Models are loaded directly from HuggingFace and auto-downloaded on first use (no
+custom downloader layer).
 """
 
 import os
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -43,15 +42,18 @@ for _var in (
 ):
     os.environ[_var] = MODEL_WEIGHTS_DIR
 
+# vLLM and torch.compile/Inductor write large JIT/compile artifacts (the
+# ~58 s "torch.compile took ..." step that both the Qwen3-ASR and OmniVoice
+# engines pay).  By default these land in ~/.cache, which is ephemeral on
+# serverless containers, so the compile is re-paid on every cold start.
+# Redirect them under the (persisted) weights dir so a warmed compile cache
+# survives container restarts.  setdefault keeps any explicit user override.
+_vllm_cache = os.path.join(MODEL_WEIGHTS_DIR, "vllm_cache")
+_inductor_cache = os.path.join(MODEL_WEIGHTS_DIR, "torchinductor_cache")
+for _d in (_vllm_cache, _inductor_cache):
+    Path(_d).mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("VLLM_CACHE_ROOT", _vllm_cache)
+os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", _inductor_cache)
 
-def resolve_model(env_var: str, default_repo_id: str, explicit: Optional[str] = None) -> str:
-    """Resolve a model id/path to hand straight to a loader.
 
-    Precedence: ``explicit`` arg → ``$env_var`` → ``default_repo_id``.  The
-    default is a HuggingFace repo id, which loaders auto-download into
-    ``MODEL_WEIGHTS_DIR`` on first use.  A local path is returned unchanged.
-    """
-    return explicit or os.environ.get(env_var) or default_repo_id
-
-
-__all__ = ["MODEL_WEIGHTS_DIR", "resolve_model"]
+__all__ = ["MODEL_WEIGHTS_DIR"]

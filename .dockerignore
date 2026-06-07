@@ -23,12 +23,7 @@ data_q/
 data_speedup/
 iwslt26/
 
-# Model weights not in the deploy stack — added selectively in Dockerfile.
-# Comment out a line here to include that model family in the build context.
-models_weights/Qwen3-TTS-12Hz-0.6B-Base
-models_weights/models--Qwen--Qwen3-TTS-12Hz-0.6B-Base
-models_weights/models--pyannote--*
-models_weights/pyannote*
-models_weights/hub
-models_weights/xet
-models_weights/translategemma-4b-it
+# Weights are NOT baked into the image — MODEL_WEIGHTS_DIR is a mounted volume,
+# auto-populated from HuggingFace on first use. Keep the local cache out of the
+# build context.
+models_weights/

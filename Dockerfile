@@ -1,13 +1,17 @@
-# Build:  docker build -t langswap:latest .
-# Run:    docker run --rm --gpus all -p 7860:7860 \
-#           -v "$PWD/models_weights:/models" -v "$PWD/data:/app/data" \
-#           langswap:latest
-#         # then open http://localhost:7860
+# RunPod serverless image: the container runs the RunPod handler (serverless.py),
+# not the Gradio UI.  Model weights live in MODEL_WEIGHTS_DIR (a mounted volume),
+# auto-downloaded on first use if absent — they are not baked into image layers.
+#
+# Build:         docker build -t langswap/video-translation-pipeline:4.0-base .
+#
+# There is no web server — the worker pulls jobs from the RunPod queue. To smoke
+# it locally:    docker run --rm --gpus all <image>   # boots the handler
 
 FROM nvidia/cuda:13.0.0-cudnn-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
+    PIP_BREAK_SYSTEM_PACKAGES=1 \
     PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -37,29 +41,58 @@ ENV UV_PYTHON=/usr/bin/python3 \
 
 WORKDIR /app
 
-COPY requirements.txt overrides.txt pyproject.toml ./
-RUN uv pip install -r requirements.txt --override overrides.txt --system && \
-    uv pip install 'gradio>=4.0.0' fastapi 'safetensors>=0.4.3' \
-                       'tokenizers>=0.22.0,<=0.23.0' accelerate sentencepiece protobuf \
-                       --override overrides.txt --system
-
-RUN uv pip install qwen-asr qwen-tts --no-deps --system && \
-    uv pip install nagisa soynlp librosa qwen-omni-utils runpod \
-        --override overrides.txt --system
-
+# Single source of truth for dependencies: pyproject.toml + uv. The ".[gpu]"
+# extra pulls the whole local stack — torch/torchaudio/torchcodec from the CUDA 13
+# index and llama-cpp-python from its prebuilt CUDA (cu124) wheel so Gemma-4-E2B
+# translation offloads to the GPU (the CPU build is far too slow for the per-line
+# isochrony loop); both indexes are wired in pyproject's [tool.uv]. Also
+# transformers/vllm/vllm-omni (OmniVoice), faster-whisper (VAD ASR), silero-vad,
+# and the qwen-omni-utils OmniVoice runtime helper. The "runpod" extra adds the
+# serverless worker SDK (serverless.py).
+#
+# nvidia-cublas-cu12 (in the gpu extra): this is a CUDA-13 image (cu130 torch/
+# vLLM/OmniVoice), but ctranslate2 (faster-whisper's backend) links cuBLAS *12*
+# (libcublas.so.12) — absent here, so GPU ASR would crash with "Library
+# libcublas.so.12 is not found". cuDNN 9 is already present (cu13, used by torch)
+# and is ABI-compatible, so we add ONLY cuBLAS-12 — NOT nvidia-cudnn-cu12, which
+# would overwrite the cu13 cuDNN torch/vLLM rely on. The cu12 and cu13 cuBLAS
+# coexist in nvidia/cublas/lib (distinct .so.12/.so.13); ctranslate2's RPATH
+# ($ORIGIN/../nvidia/cublas/lib) finds .so.12 with no LD_LIBRARY_PATH needed.
+#
+# nvidia-cuda-runtime-cu12 (also in the gpu extra): the prebuilt llama-cpp-python
+# wheel is built against CUDA 12, so libllama.so dlopens libcudart.so.12 (and
+# libcublas.so.12). cudart-12 is absent on this cu13 image, and — unlike
+# ctranslate2 — libllama.so has NO RPATH into the nvidia pip lib dirs, so it
+# finds neither .so.12 via $ORIGIN. We add cudart-12 (cublas-12 is already here
+# for ctranslate2) and put both cu12 lib dirs on LD_LIBRARY_PATH below. The cu12
+# libs have distinct sonames (.so.12) from the cu13 libs torch/vLLM load (.so.13),
+# so they coexist with no hijack. libcuda.so.1 (the driver) is injected by the
+# RunPod GPU runtime at container start.
+COPY pyproject.toml README.md ./
 COPY langswap/ ./langswap/
 COPY gradio_demo.py main.py serverless.py ./
-COPY langswap/__VERSION__ ./langswap/__VERSION__
 
+# Reinstall pip/setuptools/wheel via uv so they carry pip metadata (RECORD);
+# the apt-packaged versions lack it and can't be upgraded/uninstalled later.
+RUN uv pip install pip setuptools wheel --system
+RUN uv pip install -e ".[gpu,runpod]" --system
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3-setuptools python3-wheel \
-        && rm -rf /var/lib/apt/lists/*
-RUN uv pip install -e . --no-deps --no-build-isolation --system
+# Let llama-cpp-python's libllama.so find the CUDA-12 cudart/cublas runtimes
+# (see the nvidia-cuda-runtime-cu12 note above).
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cublas/lib:${LD_LIBRARY_PATH}
 
-ENV MODEL_WEIGHTS_DIR=/models \
+# MODEL_WEIGHTS_DIR should be a mounted volume holding the model weights (OmniVoice,
+# faster-whisper large-v3, the Gemma-4-E2B GGUF under gemma-4-E2B-it-GGUF/, pyannote
+# configs).  Anything absent is auto-downloaded into it on first use.
+ENV MODEL_WEIGHTS_DIR=/app/models_weights \
     LANGSWAP_DATA_DIR=/app/data
+# ASR runs on GPU (faster-whisper large-v3, float16).  The only missing piece on
+# this CUDA-13 image was cuBLAS-12, added above (nvidia-cublas-cu12); cuDNN 9 is
+# already present.
 
-EXPOSE 7860
-
-CMD ["python", "-u", "gradio_demo.py", "--host", "0.0.0.0", "--port", "7860"]
+# No EXPOSE: the RunPod serverless worker pulls jobs from the queue and serves no
+# HTTP port (the old EXPOSE 7860 belonged to the Gradio UI).
+#
+# RunPod serverless handler — NOT the Gradio UI.  Running gradio_demo.py here is
+# why jobs previously sat in_queue: no handler ever registered with RunPod.
+CMD ["python", "-u", "serverless.py"]

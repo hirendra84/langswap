@@ -7,6 +7,19 @@ from pyrubberband.pyrb import time_stretch
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
 
+# Silero VAD is a small, read-only model reused across every merge (and again on
+# the re-dub / update-translation path).  Load it once per process instead of on
+# each VideoDubbingManager construction.
+_VAD_MODEL = None
+
+
+def _get_vad_model():
+    global _VAD_MODEL
+    if _VAD_MODEL is None:
+        _VAD_MODEL = load_silero_vad()
+    return _VAD_MODEL
+
+
 class VideoDubbingManager:
     _file_repository: FileRepository
 
@@ -15,7 +28,7 @@ class VideoDubbingManager:
 
         self.logger = logger
 
-        self.model_vad = load_silero_vad()
+        self.model_vad = _get_vad_model()
     
     def get_pause(self, wav_path, sr, seconds=True):
         """
@@ -129,6 +142,58 @@ class VideoDubbingManager:
 
         return audio
     
+    def fit_segment(self, segment, source_sr: int, available_pause: float = 0.0):
+        """Fit ONE dubbed segment to its source window — the streaming-safe core.
+
+        This is exactly the per-segment body of ``merge_timestamps_speedup``
+        (the work for one ``idx``), pulled out so the streaming path can fit
+        segments one at a time **without** the trailing global ``time_stretch``
+        that the batch method applies over the whole concatenated track. That
+        global pass needs every segment up front, so it's the one thing that
+        cannot stream (docs/streaming_dubbing_design.md §4.1). The batch method
+        is left untouched; this is additive.
+
+        Args:
+            segment: a TranslatedTextedSegment with ``source_file`` (set by
+                AudioDubbingManager.split_audio_seconds) and ``generated_file``.
+            source_sr: sample rate of the source vocals (for change_pauses).
+            available_pause: the inter-segment gap (seconds) to the next segment
+                in the source timeline; the speedup may "borrow" up to half of
+                it before time-stretching, mirroring the batch logic.
+
+        Returns:
+            (audio_tensor[1, N], sr_generated, pause_after_seconds) where
+            ``pause_after_seconds`` is the silence to place after this segment
+            within the chunk (within-window fill + leftover inter-segment gap).
+        """
+        _, sr_generated = torchaudio.load(segment.generated_file)
+        source_length = segment.end - segment.start
+
+        audio = self.change_pauses(segment.generated_file, segment.source_file,
+                                   sr_gen=sr_generated, sr_source=source_sr)
+        audio_length = audio.shape[1] / sr_generated
+
+        pause_size = available_pause
+        pause_size_to_take = 0.5 * pause_size
+        if audio_length > source_length:
+            pause_size_to_take = min(audio_length - source_length, pause_size_to_take)
+            pause_size_to_take = max(pause_size_to_take, 0.0)
+
+            audio_length -= pause_size_to_take
+            pause_size -= pause_size_to_take
+
+            if audio_length > (source_length + pause_size_to_take):
+                rate = audio_length / (source_length + pause_size_to_take)
+                self.logger.file_logger.debug(
+                    f"[stream] segment overlong, time_stretch rate={rate:.3f}")
+                audio = time_stretch(audio.squeeze().numpy(), sr_generated, rate=rate)
+                audio = torch.tensor(audio).unsqueeze(0)
+
+        generated_audio_length = audio.shape[1] / sr_generated
+        pause_extension = max(source_length - generated_audio_length, 0.0)
+        final_pause_length = max(pause_size + pause_extension, 0.0)
+        return audio, sr_generated, final_pause_length
+
     def merge_timestamps_speedup(self, video_translation, vocals_audio):
         """
         The algo to speed up each of the samples:

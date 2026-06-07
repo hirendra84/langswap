@@ -8,14 +8,6 @@ from langswap.file_repository import FileRepository
 from tqdm import tqdm
 from typing import List
 
-# sys.path.append(os.path.abspath("/app/resemble"))
-
-try:
-    from resemble_enhance.enhancer.inference import denoise, enhance
-except (ModuleNotFoundError, TypeError):  # optional dependency (or incompatible Python)
-    denoise = None
-    enhance = None
-
 
 class AudioDubbingManager:
     _file_repository: FileRepository
@@ -40,28 +32,6 @@ class AudioDubbingManager:
             torchaudio.save(audio_path, resampled_audio, sample_rate=target_sr)
         return audio_path
 
-    def enhance_audio(self, audio_path, save_path, solver="midpoint", nfe=64, tau=0.5):
-        if denoise is None or enhance is None:
-            raise ModuleNotFoundError(
-                "Optional dependency `resemble_enhance` is not installed. "
-                "Install it to use audio enhancement, or run with enhance=False."
-            )
-        solver = solver.lower()
-        nfe = int(nfe)
-        lambd = 0.9
-        dwav, sr = torchaudio.load(audio_path)
-        dwav = dwav.mean(dim=0)
-
-        wav1, new_sr = denoise(dwav, sr, self.device)
-        wav2, new_sr = enhance(
-            dwav, sr, self.device, nfe=nfe, solver=solver, lambd=lambd, tau=tau
-        )
-
-        wav2 = wav2.cpu().unsqueeze(0)
-
-        torchaudio.save(save_path, wav2, new_sr)
-        return save_path
-
     def split_audio_seconds(
         self, video_translation, audio_path, temp_folder, sample_rate=24000
     ):
@@ -69,7 +39,7 @@ class AudioDubbingManager:
         Splits the audio in seconds mentioned in df.
         Audio fragments are then used for style transfering.
 
-        Sample rate is set to the TTS engine setting, xtts: 24000
+        Sample rate is set to the TTS engine setting (24000 for OmniVoice).
         """
 
         sound_file = AudioSegment.from_wav(audio_path)
@@ -88,25 +58,6 @@ class AudioDubbingManager:
 
                 sound.export(file_path, format="wav")
             video_translation.translated_texts[idx].source_file = file_path
-        return video_translation
-
-    def enhance_pipeline(self, video_translation, temp_folder, use_cashe: bool = True):
-        for idx, segment in enumerate(
-            tqdm(
-                video_translation.translated_texts,
-                desc="Enhance audio pipeline.",
-                leave=True,
-            )
-        ):
-            audio_path = segment.source_file
-
-            folder_path, audio_name = os.path.split(audio_path)
-            save_path = os.path.join(temp_folder, audio_name)
-            save_path = save_path.replace(".wav", "_enhanced.wav")
-            if  not use_cashe or not os.path.exists(save_path):
-                save_path = self.enhance_audio(audio_path, save_path)
-
-            video_translation.translated_texts[idx].source_file = save_path
         return video_translation
 
     @classmethod

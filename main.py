@@ -94,10 +94,8 @@ def run_local(
         source_video_path=str(video_path),
         base_dir=base_dir,
         device=resolved_device,
-        voice_conv=False,
         tts_model=tts_engine,
         dubbing_algo=dubbing_algo,
-        eleven_api_token=os.environ.get("ELEVEN_API_KEY"),
         watermark=False,
         skip_diarization=skip_diarization,
         asr_backend=asr_backend,
@@ -148,8 +146,8 @@ def _build_parser() -> argparse.ArgumentParser:
                          help="optional; pipeline auto-detects if omitted")
     p_local.add_argument("--device", default="auto", choices=["auto", "cuda", "mps", "cpu"])
     p_local.add_argument("--tts", default="omnivoice")
-    p_local.add_argument("--asr", default="qwen")
-    p_local.add_argument("--translation", default="local")
+    p_local.add_argument("--asr", default="vad")
+    p_local.add_argument("--translation", default="llamacpp")
     p_local.add_argument("--dubbing", default="speedup",
                          choices=["speedup", "stretch_whole", "pause_based"])
     p_local.add_argument("--with-diarization", action="store_true",
