@@ -3,8 +3,6 @@
 # auto-downloaded on first use if absent — they are not baked into image layers.
 #
 # Build:         docker build -t langswap/video-translation-pipeline:4.0-base .
-# Warm the public models / vLLM + torch.compile caches and commit the final
-# image:         scripts/warm_and_commit.sh
 #
 # There is no web server — the worker pulls jobs from the RunPod queue. To smoke
 # it locally:    docker run --rm --gpus all <image>   # boots the handler
@@ -60,6 +58,16 @@ WORKDIR /app
 # would overwrite the cu13 cuDNN torch/vLLM rely on. The cu12 and cu13 cuBLAS
 # coexist in nvidia/cublas/lib (distinct .so.12/.so.13); ctranslate2's RPATH
 # ($ORIGIN/../nvidia/cublas/lib) finds .so.12 with no LD_LIBRARY_PATH needed.
+#
+# nvidia-cuda-runtime-cu12 (also in the gpu extra): the prebuilt llama-cpp-python
+# wheel is built against CUDA 12, so libllama.so dlopens libcudart.so.12 (and
+# libcublas.so.12). cudart-12 is absent on this cu13 image, and — unlike
+# ctranslate2 — libllama.so has NO RPATH into the nvidia pip lib dirs, so it
+# finds neither .so.12 via $ORIGIN. We add cudart-12 (cublas-12 is already here
+# for ctranslate2) and put both cu12 lib dirs on LD_LIBRARY_PATH below. The cu12
+# libs have distinct sonames (.so.12) from the cu13 libs torch/vLLM load (.so.13),
+# so they coexist with no hijack. libcuda.so.1 (the driver) is injected by the
+# RunPod GPU runtime at container start.
 COPY pyproject.toml README.md ./
 COPY langswap/ ./langswap/
 COPY gradio_demo.py main.py serverless.py ./
@@ -68,6 +76,10 @@ COPY gradio_demo.py main.py serverless.py ./
 # the apt-packaged versions lack it and can't be upgraded/uninstalled later.
 RUN uv pip install pip setuptools wheel --system
 RUN uv pip install -e ".[gpu,runpod]" --system
+
+# Let llama-cpp-python's libllama.so find the CUDA-12 cudart/cublas runtimes
+# (see the nvidia-cuda-runtime-cu12 note above).
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cublas/lib:${LD_LIBRARY_PATH}
 
 # MODEL_WEIGHTS_DIR should be a mounted volume holding the model weights (OmniVoice,
 # faster-whisper large-v3, the Gemma-4-E2B GGUF under gemma-4-E2B-it-GGUF/, pyannote

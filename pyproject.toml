@@ -66,6 +66,7 @@ gpu = [
     "faster-whisper",
     "llama-cpp-python",
     "nvidia-cublas-cu12",
+    "nvidia-cuda-runtime-cu12",
     "demucs @ git+https://github.com/shigabeev/demucs@9e454051dc5ed957b13525eaad82a2e74e8e5dcb",
     "pyrubberband",
     "silero-vad",
