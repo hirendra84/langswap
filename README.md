@@ -9,10 +9,10 @@
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](#-quick-start)
 [![Stars](https://img.shields.io/github/stars/langswap-app/langswap?style=social)](https://github.com/langswap-app/langswap)
 
-<!-- TODO: drop a short screen capture at docs/demo.gif and uncomment the line below.
-     Best result: source video on the left, dubbed video on the right, ~10s loop. -->
-<!-- ![langswap demo](docs/demo.gif) -->
-_📽️ demo GIF coming soon_
+
+https://github.com/user-attachments/assets/6d01d103-d807-4f41-ac31-de700a286a13
+
+
 
 </div>
 
