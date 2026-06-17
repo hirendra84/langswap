@@ -369,8 +369,9 @@ def build_editor_tab() -> None:
                 speaker_choices = sorted({(it.get("speaker") or "SPEAKER_00") for it in state})
                 for i, seg in enumerate(state):
                     with gr.Group():
-                        with gr.Row():
-                            gr.Markdown(f"### {i + 1}")
+                        with gr.Row(equal_height=True):
+                            with gr.Column(scale=0, min_width=34):
+                                gr.Markdown(f"**{i + 1}**")
                             start_in = gr.Number(value=seg["start"], label="start", scale=1, min_width=90, interactive=True)
                             end_in = gr.Number(value=seg["end"], label="end", scale=1, min_width=90, interactive=True)
                             speaker_in = gr.Dropdown(
